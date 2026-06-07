@@ -109,13 +109,24 @@ export default function BookingsPage() {
   return (
     <div className="p-6 lg:p-10 animate-fade-in">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="font-serif text-2xl md:text-3xl font-medium">
-          Bookings
-        </h1>
-        <p className="text-muted text-sm mt-1">
-          {filtered.length} of {bookings.length} bookings shown
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="font-serif text-2xl md:text-3xl font-medium">
+            Bookings
+          </h1>
+          <p className="text-muted text-sm mt-1">
+            {filtered.length} of {bookings.length} bookings shown
+          </p>
+        </div>
+        <Link
+          href="/bookings/new"
+          className="inline-flex items-center gap-2 bg-forest text-cream px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-sage-700 transition-colors self-start"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          New Booking
+        </Link>
       </div>
 
       {/* Search & Filters */}
@@ -263,11 +274,12 @@ export default function BookingsPage() {
                   return (
                     <tr
                       key={booking.id}
-                      className="hover:bg-accent-bg/30 transition-colors"
+                      className="hover:bg-accent-bg/30 transition-colors cursor-pointer group"
+                      onClick={() => window.location.href = `/bookings/${booking.id}`}
                     >
                       <td className="px-6 py-4">
                         <div>
-                          <p className="text-sm font-medium">{booking.name}</p>
+                          <p className="text-sm font-medium group-hover:text-sage-600 transition-colors">{booking.name}</p>
                           <p className="text-xs text-muted">
                             {booking.age}y &middot; {booking.gender}
                             {booking.pronouns ? ` (${booking.pronouns})` : ""}
@@ -302,12 +314,12 @@ export default function BookingsPage() {
                         )}
                       </td>
                       <td className="px-4 py-4">
-                        <Link
-                          href={`/bookings/${booking.id}`}
-                          className="text-sm text-sage-600 hover:text-forest font-medium transition-colors"
-                        >
+                        <span className="text-sm text-sage-600 group-hover:text-forest font-medium transition-colors inline-flex items-center gap-1">
                           View
-                        </Link>
+                          <svg className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                          </svg>
+                        </span>
                       </td>
                     </tr>
                   );

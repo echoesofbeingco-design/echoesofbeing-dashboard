@@ -13,6 +13,13 @@ interface Stats {
   thisMonth: number;
 }
 
+interface ClientStats {
+  total: number;
+  active: number;
+  inactive: number;
+  discharged: number;
+}
+
 interface RecentBooking {
   id: string;
   name: string;
@@ -23,9 +30,19 @@ interface RecentBooking {
   category: string;
 }
 
+interface HomeworkTask {
+  clientId: string;
+  clientName: string;
+  sessionId: string;
+  sessionDate: string;
+  therapistHomework: string;
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [clientStats, setClientStats] = useState<ClientStats | null>(null);
   const [recentBookings, setRecentBookings] = useState<RecentBooking[]>([]);
+  const [homeworkTasks, setHomeworkTasks] = useState<HomeworkTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
 
@@ -34,10 +51,14 @@ export default function DashboardPage() {
       fetch("/api/bookings/stats").then((r) => r.json()),
       fetch("/api/bookings").then((r) => r.json()),
       fetch("/api/auth/me").then((r) => r.json()),
-    ]).then(([statsData, bookingsData, userData]) => {
+      fetch("/api/clients/stats").then((r) => r.json()).catch(() => ({ stats: null })),
+      fetch("/api/clients/homework").then((r) => r.json()).catch(() => ({ tasks: [] })),
+    ]).then(([statsData, bookingsData, userData, clientStatsData, homeworkData]) => {
       setStats(statsData.stats);
       setRecentBookings((bookingsData.bookings || []).slice(0, 5));
       setUser(userData);
+      setClientStats(clientStatsData.stats || null);
+      setHomeworkTasks(homeworkData.tasks || []);
       setLoading(false);
     });
   }, []);
@@ -74,7 +95,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <StatCard
           label="Total Bookings"
           value={stats?.total || 0}
@@ -112,6 +133,16 @@ export default function DashboardPage() {
             </svg>
           }
           warning={pendingCount > 0}
+        />
+        <StatCard
+          label="Active Clients"
+          value={clientStats?.active || 0}
+          icon={
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+            </svg>
+          }
+          href="/clients"
         />
       </div>
 
@@ -209,6 +240,41 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Therapist Homework Tasks */}
+      {homeworkTasks.length > 0 && (
+        <div className="border border-amber-200 rounded-xl bg-amber-50/50 mt-6">
+          <div className="px-6 py-4 border-b border-amber-200 flex items-center gap-2">
+            <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h2 className="font-serif text-lg font-medium">Your Tasks</h2>
+            <span className="text-xs bg-amber-200 text-amber-800 rounded-full px-2 py-0.5 font-semibold ml-1">
+              {homeworkTasks.length}
+            </span>
+          </div>
+          <div className="divide-y divide-amber-200/60">
+            {homeworkTasks.map((task) => (
+              <Link
+                key={`${task.clientId}-${task.sessionId}`}
+                href={`/clients/${task.clientId}/sessions/${task.sessionId}`}
+                className="flex items-start justify-between px-6 py-4 hover:bg-amber-100/50 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{task.clientName}</p>
+                  <p className="text-xs text-muted mt-1 line-clamp-2">{task.therapistHomework}</p>
+                </div>
+                <span className="text-xs text-muted ml-4 flex-shrink-0">
+                  {new Date(task.sessionDate).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Category & Session Type breakdown */}
       {stats && (stats.total > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
@@ -251,23 +317,17 @@ function StatCard({
   icon,
   accent,
   warning,
+  href,
 }: {
   label: string;
   value: number;
   icon: React.ReactNode;
   accent?: boolean;
   warning?: boolean;
+  href?: string;
 }) {
-  return (
-    <div
-      className={`rounded-xl border p-5 transition-shadow hover:shadow-md ${
-        warning
-          ? "border-orange-200 bg-orange-50/80"
-          : accent
-            ? "border-sage-300 bg-secondary-bg/60"
-            : "border-border bg-cream-light"
-      }`}
-    >
+  const content = (
+    <>
       <div className="flex items-center justify-between mb-3">
         <span
           className={`${
@@ -279,6 +339,24 @@ function StatCard({
       </div>
       <p className="text-2xl font-semibold">{value}</p>
       <p className="text-xs text-muted mt-1">{label}</p>
-    </div>
+    </>
   );
+
+  const className = `rounded-xl border p-5 transition-shadow hover:shadow-md ${
+    warning
+      ? "border-orange-200 bg-orange-50/80"
+      : accent
+        ? "border-sage-300 bg-secondary-bg/60"
+        : "border-border bg-cream-light"
+  }`;
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className={className}>{content}</div>;
 }

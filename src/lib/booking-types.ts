@@ -10,6 +10,7 @@ export interface Booking {
   category: string;
   concern: string;
   status: string;
+  clientId?: string;
   createdAt: string;
   calendly?: {
     eventName?: string;
