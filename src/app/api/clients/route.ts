@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth, withSecurityHeaders } from "@/lib/auth";
-import { getAllClients, createClient, syncBookingsToClients } from "@/lib/clients";
+import { getAllClientsLite, createClient, syncBookingsToClients } from "@/lib/clients";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       hasSynced = true;
     }
 
-    const clients = await getAllClients();
+    const clients = await getAllClientsLite();
     return withSecurityHeaders(Response.json({ clients }));
   } catch (error) {
     console.error("Error fetching clients:", error);

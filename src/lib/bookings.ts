@@ -101,21 +101,26 @@ export async function addBookingNote(
 
 export async function getBookingStats() {
   const db = getAdminDb();
-  const snapshot = await db.collection("bookings").get();
-  const bookings = snapshot.docs.map((doc) => doc.data());
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const total = bookings.length;
+  // Use .select() to fetch ONLY the fields needed for stats (not full docs)
+  const snapshot = await db
+    .collection("bookings")
+    .select("status", "category", "sessionType", "createdAt")
+    .get();
+
+  const total = snapshot.size;
   const byStatus: Record<string, number> = {};
   const byCategory: Record<string, number> = {};
   const bySessionType: Record<string, number> = {};
 
   let thisWeek = 0;
   let thisMonth = 0;
-  const now = new Date();
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  for (const b of bookings) {
+  for (const doc of snapshot.docs) {
+    const b = doc.data();
     const status = (b.status as string) || "unknown";
     byStatus[status] = (byStatus[status] || 0) + 1;
 

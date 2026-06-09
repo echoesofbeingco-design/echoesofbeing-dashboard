@@ -92,6 +92,41 @@ export async function getAllClients(): Promise<Client[]> {
   return snapshot.docs.map((doc) => normalizeClient(doc));
 }
 
+/**
+ * Lightweight query for list views — fetches only the fields needed for the
+ * clients table, skipping heavy clinical data (saves bandwidth & latency).
+ */
+export async function getAllClientsLite(): Promise<
+  Array<{
+    id: string; name: string; email: string; whatsapp: string;
+    age: string; gender: string; pronouns: string; occupation: string;
+    status: string; createdAt: string;
+  }>
+> {
+  const db = getAdminDb();
+  const snapshot = await db
+    .collection("clients")
+    .orderBy("createdAt", "desc")
+    .select("name", "email", "whatsapp", "age", "gender", "pronouns", "occupation", "status", "createdAt")
+    .get();
+
+  return snapshot.docs.map((doc) => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      name: d.name || "",
+      email: d.email || "",
+      whatsapp: d.whatsapp || "",
+      age: d.age || "",
+      gender: d.gender || "",
+      pronouns: d.pronouns || "",
+      occupation: d.occupation || "",
+      status: d.status || "active",
+      createdAt: normalizeTimestamp(d.createdAt) || "",
+    };
+  });
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeClient(doc: any): Client {
   const data = doc.data();
@@ -376,20 +411,19 @@ export async function syncBookingsToClients(): Promise<number> {
 
 export async function getClientStats() {
   const db = getAdminDb();
-  const snapshot = await db.collection("clients").get();
-  const clients = snapshot.docs.map((doc) => doc.data());
 
-  let active = 0;
-  let inactive = 0;
-  let discharged = 0;
+  // Run three targeted count queries in parallel instead of fetching ALL documents
+  const [activeSnap, inactiveSnap, dischargedSnap] = await Promise.all([
+    db.collection("clients").where("status", "==", "active").count().get(),
+    db.collection("clients").where("status", "==", "inactive").count().get(),
+    db.collection("clients").where("status", "==", "discharged").count().get(),
+  ]);
 
-  for (const c of clients) {
-    if (c.status === "active") active++;
-    else if (c.status === "inactive") inactive++;
-    else if (c.status === "discharged") discharged++;
-  }
+  const active = activeSnap.data().count;
+  const inactive = inactiveSnap.data().count;
+  const discharged = dischargedSnap.data().count;
 
-  return { total: clients.length, active, inactive, discharged };
+  return { total: active + inactive + discharged, active, inactive, discharged };
 }
 
 // ── Therapist homework (pending tasks across all clients) ────────────────
@@ -404,7 +438,53 @@ export async function getPendingTherapistHomework(): Promise<
   }>
 > {
   const db = getAdminDb();
-  const clientsSnap = await db.collection("clients").where("status", "==", "active").get();
+
+  // Two parallel queries instead of N+1 sequential queries:
+  // 1. All active clients (for names)
+  // 2. Collection group query for ALL sessions with therapist homework
+  const [clientsSnap, sessionsSnap] = await Promise.all([
+    db.collection("clients").where("status", "==", "active").select("name").get(),
+    db.collectionGroup("sessions")
+      .orderBy("date", "desc")
+      .get(),
+  ]);
+
+  // Build a lookup map: clientId → name
+  const clientNames = new Map<string, string>();
+  for (const doc of clientsSnap.docs) {
+    clientNames.set(doc.id, doc.data().name || "Unknown");
+  }
+
+  // Group sessions by client and pick only the latest one per client
+  const latestByClient = new Map<string, {
+    sessionId: string;
+    sessionDate: string;
+    therapistHomework: string;
+  }>();
+
+  for (const sessionDoc of sessionsSnap.docs) {
+    // Extract clientId from the document path: clients/{clientId}/sessions/{sessionId}
+    const pathParts = sessionDoc.ref.path.split("/");
+    const clientId = pathParts[1]; // clients/{clientId}/sessions/{sessionId}
+
+    // Only consider active clients
+    if (!clientNames.has(clientId)) continue;
+
+    // Since sessions are ordered by date desc, the first one per client is the latest
+    if (latestByClient.has(clientId)) continue;
+
+    const data = sessionDoc.data();
+    if (data.therapistHomework && data.therapistHomework.trim()) {
+      latestByClient.set(clientId, {
+        sessionId: sessionDoc.id,
+        sessionDate: normalizeTimestamp(data.date) || data.date || "",
+        therapistHomework: data.therapistHomework,
+      });
+    } else {
+      // Mark as seen so we skip older sessions for this client
+      latestByClient.set(clientId, { sessionId: "", sessionDate: "", therapistHomework: "" });
+    }
+  }
 
   const tasks: Array<{
     clientId: string;
@@ -414,28 +494,13 @@ export async function getPendingTherapistHomework(): Promise<
     therapistHomework: string;
   }> = [];
 
-  for (const clientDoc of clientsSnap.docs) {
-    const clientData = clientDoc.data();
-    // Get last session with therapist homework
-    const sessionsSnap = await db
-      .collection("clients")
-      .doc(clientDoc.id)
-      .collection("sessions")
-      .orderBy("date", "desc")
-      .limit(1)
-      .get();
-
-    for (const sessionDoc of sessionsSnap.docs) {
-      const sessionData = sessionDoc.data();
-      if (sessionData.therapistHomework && sessionData.therapistHomework.trim()) {
-        tasks.push({
-          clientId: clientDoc.id,
-          clientName: clientData.name || "Unknown",
-          sessionId: sessionDoc.id,
-          sessionDate: normalizeTimestamp(sessionData.date) || sessionData.date || "",
-          therapistHomework: sessionData.therapistHomework,
-        });
-      }
+  for (const [clientId, session] of latestByClient) {
+    if (session.therapistHomework) {
+      tasks.push({
+        clientId,
+        clientName: clientNames.get(clientId) || "Unknown",
+        ...session,
+      });
     }
   }
 
