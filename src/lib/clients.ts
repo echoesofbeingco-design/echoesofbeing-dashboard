@@ -14,6 +14,14 @@ export interface Client {
   desiredOutcomes: string;
   status: "active" | "inactive" | "discharged";
   bookingId?: string;
+  // Clinical fields (client-level, not per-session)
+  symptoms: string;
+  concerns: string;
+  stressors: string;
+  interpersonalHistory: InterpersonalHistory;
+  keyThemes: KeyThemes;
+  theoreticalLens: TheoreticalLens;
+  treatmentFocus: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,13 +59,6 @@ export interface ClientSession {
   nextSession: string;
   clientHomework: string;
   therapistHomework: string;
-  symptoms: string;
-  concerns: string;
-  stressors: string;
-  interpersonalHistory: InterpersonalHistory;
-  keyThemes: KeyThemes;
-  theoreticalLens: TheoreticalLens;
-  treatmentFocus: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,31 +89,12 @@ export async function getAllClients(): Promise<Client[]> {
   const db = getAdminDb();
   const snapshot = await db.collection("clients").orderBy("createdAt", "desc").get();
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      name: data.name || "",
-      email: data.email || "",
-      whatsapp: data.whatsapp || "",
-      age: data.age || "",
-      gender: data.gender || "",
-      pronouns: data.pronouns || "",
-      occupation: data.occupation || "",
-      desiredOutcomes: data.desiredOutcomes || "",
-      status: data.status || "active",
-      bookingId: data.bookingId || undefined,
-      createdAt: normalizeTimestamp(data.createdAt) || "",
-      updatedAt: normalizeTimestamp(data.updatedAt) || "",
-    };
-  });
+  return snapshot.docs.map((doc) => normalizeClient(doc));
 }
 
-export async function getClientById(id: string): Promise<Client | null> {
-  const db = getAdminDb();
-  const doc = await db.collection("clients").doc(id).get();
-  if (!doc.exists) return null;
-  const data = doc.data()!;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeClient(doc: any): Client {
+  const data = doc.data();
   return {
     id: doc.id,
     name: data.name || "",
@@ -125,9 +107,32 @@ export async function getClientById(id: string): Promise<Client | null> {
     desiredOutcomes: data.desiredOutcomes || "",
     status: data.status || "active",
     bookingId: data.bookingId || undefined,
+    symptoms: data.symptoms || "",
+    concerns: data.concerns || "",
+    stressors: data.stressors || "",
+    interpersonalHistory: {
+      ...EMPTY_INTERPERSONAL,
+      ...(data.interpersonalHistory || {}),
+    },
+    keyThemes: {
+      ...EMPTY_KEY_THEMES,
+      ...(data.keyThemes || {}),
+    },
+    theoreticalLens: {
+      ...EMPTY_THEORETICAL_LENS,
+      ...(data.theoreticalLens || {}),
+    },
+    treatmentFocus: data.treatmentFocus || "",
     createdAt: normalizeTimestamp(data.createdAt) || "",
     updatedAt: normalizeTimestamp(data.updatedAt) || "",
   };
+}
+
+export async function getClientById(id: string): Promise<Client | null> {
+  const db = getAdminDb();
+  const doc = await db.collection("clients").doc(id).get();
+  if (!doc.exists) return null;
+  return normalizeClient(doc);
 }
 
 export async function createClient(data: {
@@ -207,22 +212,6 @@ function normalizeSession(
     nextSession: data.nextSession || "",
     clientHomework: data.clientHomework || "",
     therapistHomework: data.therapistHomework || "",
-    symptoms: data.symptoms || "",
-    concerns: data.concerns || "",
-    stressors: data.stressors || "",
-    interpersonalHistory: {
-      ...EMPTY_INTERPERSONAL,
-      ...(data.interpersonalHistory || {}),
-    },
-    keyThemes: {
-      ...EMPTY_KEY_THEMES,
-      ...(data.keyThemes || {}),
-    },
-    theoreticalLens: {
-      ...EMPTY_THEORETICAL_LENS,
-      ...(data.theoreticalLens || {}),
-    },
-    treatmentFocus: data.treatmentFocus || "",
     createdAt: normalizeTimestamp(data.createdAt) || "",
     updatedAt: normalizeTimestamp(data.updatedAt) || "",
   };
@@ -283,13 +272,6 @@ export async function createSession(
       nextSession: "",
       clientHomework: "",
       therapistHomework: "",
-      symptoms: "",
-      concerns: "",
-      stressors: "",
-      interpersonalHistory: EMPTY_INTERPERSONAL,
-      keyThemes: EMPTY_KEY_THEMES,
-      theoreticalLens: EMPTY_THEORETICAL_LENS,
-      treatmentFocus: "",
       createdAt: now,
       updatedAt: now,
     });

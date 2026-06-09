@@ -63,13 +63,10 @@ export async function PATCH(
 
     const body = await request.json();
 
-    // Allow all session fields to be updated
+    // Allow session-level fields only (clinical data lives on the client now)
     const allowedFields = [
       "date", "sessionNumber", "summary", "presentingProblem",
       "nextSession", "clientHomework", "therapistHomework",
-      "symptoms", "concerns", "stressors",
-      "interpersonalHistory", "keyThemes", "theoreticalLens",
-      "treatmentFocus",
     ];
 
     const updates: Record<string, unknown> = {};

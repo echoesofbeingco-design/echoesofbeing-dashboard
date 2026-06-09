@@ -7,16 +7,6 @@ interface Client {
   name: string;
   desiredOutcomes: string;
   occupation: string;
-}
-
-interface SessionSummary {
-  id: string;
-  date: string;
-  sessionNumber: number;
-  summary: string;
-  presentingProblem: string;
-  therapistHomework: string;
-  clientHomework: string;
   symptoms: string;
   concerns: string;
   stressors: string;
@@ -41,6 +31,16 @@ interface SessionSummary {
     focusOfIntervention: string;
   };
   treatmentFocus: string;
+}
+
+interface SessionSummary {
+  id: string;
+  date: string;
+  sessionNumber: number;
+  summary: string;
+  presentingProblem: string;
+  therapistHomework: string;
+  clientHomework: string;
 }
 
 interface MindMapNode {
@@ -137,31 +137,30 @@ export default function MindMap({
       children: [],
     });
 
-    // ── Aggregate session data
-    const allProblems: string[] = [];
-    const allStrengths: string[] = [];
-    const allStressors: string[] = [];
-    const allThoughts: string[] = [];
-    const allEmotions: string[] = [];
-    const allBehaviors: string[] = [];
-    const allPatterns: string[] = [];
-    const allTreatment: string[] = [];
-
-    for (const s of sessions) {
-      allProblems.push(...extractKeyPhrases(s.presentingProblem));
-      allStrengths.push(...extractKeyPhrases(s.interpersonalHistory.strengths));
-      allStressors.push(...extractKeyPhrases(s.stressors));
-      allStressors.push(...extractKeyPhrases(s.concerns));
-      allThoughts.push(...extractKeyPhrases(s.keyThemes.thoughts));
-      allEmotions.push(...extractKeyPhrases(s.keyThemes.emotions));
-      allBehaviors.push(...extractKeyPhrases(s.keyThemes.behaviors));
-      allPatterns.push(...extractKeyPhrases(s.interpersonalHistory.romanticPatterns));
-      allPatterns.push(...extractKeyPhrases(s.interpersonalHistory.familyPatterns));
-      allPatterns.push(...extractKeyPhrases(s.interpersonalHistory.friendsPatterns));
-      allPatterns.push(...extractKeyPhrases(s.interpersonalHistory.workplacePatterns));
-      allTreatment.push(...extractKeyPhrases(s.treatmentFocus));
-      allTreatment.push(...extractKeyPhrases(s.theoreticalLens.focusOfIntervention));
-    }
+    // ── Read clinical data from client (client-level, not per-session)
+    const allProblems = [
+      ...extractKeyPhrases(client.symptoms),
+      ...extractKeyPhrases(client.concerns),
+      ...sessions.flatMap((s) => extractKeyPhrases(s.presentingProblem)),
+    ];
+    const ih = client.interpersonalHistory;
+    const allStrengths = ih ? extractKeyPhrases(ih.strengths) : [];
+    const allStressors = extractKeyPhrases(client.stressors);
+    const kt = client.keyThemes;
+    const allThoughts = kt ? extractKeyPhrases(kt.thoughts) : [];
+    const allEmotions = kt ? extractKeyPhrases(kt.emotions) : [];
+    const allBehaviors = kt ? extractKeyPhrases(kt.behaviors) : [];
+    const allPatterns = ih ? [
+      ...extractKeyPhrases(ih.romanticPatterns),
+      ...extractKeyPhrases(ih.familyPatterns),
+      ...extractKeyPhrases(ih.friendsPatterns),
+      ...extractKeyPhrases(ih.workplacePatterns),
+    ] : [];
+    const tl = client.theoreticalLens;
+    const allTreatment = [
+      ...extractKeyPhrases(client.treatmentFocus),
+      ...(tl ? extractKeyPhrases(tl.focusOfIntervention) : []),
+    ];
 
     const goals = extractKeyPhrases(client.desiredOutcomes, 4);
 
@@ -778,7 +777,14 @@ export default function MindMap({
     link.click();
   }
 
-  const hasData = sessions.length > 0;
+  // Show mind map if there is ANY clinical data on the client or sessions
+  const hasData = sessions.length > 0 || !!(
+    client.symptoms || client.concerns || client.stressors || client.desiredOutcomes ||
+    client.treatmentFocus ||
+    (client.interpersonalHistory && Object.values(client.interpersonalHistory).some((v) => v && v.trim())) ||
+    (client.keyThemes && Object.values(client.keyThemes).some((v) => v && v.trim())) ||
+    (client.theoreticalLens && Object.values(client.theoreticalLens).some((v) => v && v.trim()))
+  );
 
   if (!hasData) {
     return (
@@ -787,9 +793,9 @@ export default function MindMap({
           <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
         </svg>
         <h3 className="font-serif text-lg font-medium mb-2">Mind Map</h3>
-        <p className="text-muted text-sm mb-1">No session data available yet.</p>
+        <p className="text-muted text-sm mb-1">No clinical data available yet.</p>
         <p className="text-xs text-muted/70">
-          Create a session and fill in client details to generate an interactive mind map.
+          Fill in client details (symptoms, themes, interpersonal history) to generate an interactive mind map.
         </p>
       </div>
     );

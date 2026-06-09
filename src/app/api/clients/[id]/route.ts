@@ -65,6 +65,8 @@ export async function PATCH(
     const allowedFields = [
       "name", "email", "whatsapp", "age", "gender", "pronouns",
       "occupation", "desiredOutcomes", "status",
+      "symptoms", "concerns", "stressors",
+      "interpersonalHistory", "keyThemes", "theoreticalLens", "treatmentFocus",
     ];
     const updates: Record<string, unknown> = {};
     for (const field of allowedFields) {
