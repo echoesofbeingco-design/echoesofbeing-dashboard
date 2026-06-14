@@ -52,10 +52,6 @@ export async function POST(request: NextRequest) {
       source: "admin_dashboard",
     };
 
-    if (body.aadhar) {
-      bookingData.aadhar = body.aadhar;
-    }
-
     const bookingDoc = await db.collection("bookings").add(bookingData);
 
     // 2. Create or link client record

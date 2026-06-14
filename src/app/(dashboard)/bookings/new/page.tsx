@@ -121,7 +121,7 @@ export default function NewBookingPage() {
           New Booking
         </h1>
         <p className="text-muted text-sm mt-1">
-          Create a new booking from the admin dashboard. Aadhaar upload is optional here.
+          Create a new booking on behalf of a client from the admin dashboard.
         </p>
       </div>
 

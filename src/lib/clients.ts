@@ -441,12 +441,13 @@ export async function getPendingTherapistHomework(): Promise<
 
   // Two parallel queries instead of N+1 sequential queries:
   // 1. All active clients (for names)
-  // 2. Collection group query for ALL sessions with therapist homework
+  // 2. One collection-group query for ALL sessions. We intentionally do NOT
+  //    orderBy here — ordering a collection-group query requires a special
+  //    collection-group index. Instead we pick the latest session per client
+  //    in memory below, which keeps this a single, index-free query.
   const [clientsSnap, sessionsSnap] = await Promise.all([
     db.collection("clients").where("status", "==", "active").select("name").get(),
-    db.collectionGroup("sessions")
-      .orderBy("date", "desc")
-      .get(),
+    db.collectionGroup("sessions").get(),
   ]);
 
   // Build a lookup map: clientId → name
@@ -455,34 +456,32 @@ export async function getPendingTherapistHomework(): Promise<
     clientNames.set(doc.id, doc.data().name || "Unknown");
   }
 
-  // Group sessions by client and pick only the latest one per client
+  // For each active client, keep only their most recent session.
   const latestByClient = new Map<string, {
+    dateMs: number;
     sessionId: string;
     sessionDate: string;
     therapistHomework: string;
   }>();
 
   for (const sessionDoc of sessionsSnap.docs) {
-    // Extract clientId from the document path: clients/{clientId}/sessions/{sessionId}
-    const pathParts = sessionDoc.ref.path.split("/");
-    const clientId = pathParts[1]; // clients/{clientId}/sessions/{sessionId}
-
-    // Only consider active clients
-    if (!clientNames.has(clientId)) continue;
-
-    // Since sessions are ordered by date desc, the first one per client is the latest
-    if (latestByClient.has(clientId)) continue;
+    // Path: clients/{clientId}/sessions/{sessionId}
+    const clientId = sessionDoc.ref.path.split("/")[1];
+    if (!clientNames.has(clientId)) continue; // only active clients
 
     const data = sessionDoc.data();
-    if (data.therapistHomework && data.therapistHomework.trim()) {
+    const sessionDate =
+      normalizeTimestamp(data.date) || (data.date as string) || "";
+    const dateMs = sessionDate ? new Date(sessionDate).getTime() : 0;
+
+    const existing = latestByClient.get(clientId);
+    if (!existing || dateMs > existing.dateMs) {
       latestByClient.set(clientId, {
+        dateMs,
         sessionId: sessionDoc.id,
-        sessionDate: normalizeTimestamp(data.date) || data.date || "",
-        therapistHomework: data.therapistHomework,
+        sessionDate,
+        therapistHomework: (data.therapistHomework as string) || "",
       });
-    } else {
-      // Mark as seen so we skip older sessions for this client
-      latestByClient.set(clientId, { sessionId: "", sessionDate: "", therapistHomework: "" });
     }
   }
 
@@ -495,11 +494,13 @@ export async function getPendingTherapistHomework(): Promise<
   }> = [];
 
   for (const [clientId, session] of latestByClient) {
-    if (session.therapistHomework) {
+    if (session.therapistHomework && session.therapistHomework.trim()) {
       tasks.push({
         clientId,
         clientName: clientNames.get(clientId) || "Unknown",
-        ...session,
+        sessionId: session.sessionId,
+        sessionDate: session.sessionDate,
+        therapistHomework: session.therapistHomework,
       });
     }
   }

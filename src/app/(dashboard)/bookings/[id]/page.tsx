@@ -256,6 +256,14 @@ export default function BookingDetailPage({
           >
             {statusInfo.label}
           </span>
+          {booking.emailVerified && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Email verified
+            </span>
+          )}
           {booking.clientId && (
             <Link
               href={`/clients/${booking.clientId}`}
@@ -382,57 +390,6 @@ export default function BookingDetailPage({
             </div>
           )}
 
-          {/* Aadhaar */}
-          {booking.aadhar && (
-            <div className="border border-border rounded-xl bg-cream-light">
-              <div className="px-4 sm:px-6 py-4 border-b border-border">
-                <h2 className="font-serif text-lg font-medium">
-                  Aadhaar Documents
-                </h2>
-              </div>
-              <div className="px-4 sm:px-6 py-5 flex flex-wrap gap-4">
-                {booking.aadhar.frontUrl && (
-                  <a
-                    href={booking.aadhar.frontUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-cream hover:bg-accent-bg transition-colors text-sm font-medium"
-                  >
-                    <svg className="w-4 h-4 text-sage-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75a1.5 1.5 0 00-1.5 1.5v13.5a1.5 1.5 0 001.5 1.5z" />
-                    </svg>
-                    View Front Side
-                  </a>
-                )}
-                {booking.aadhar.backUrl && (
-                  <a
-                    href={booking.aadhar.backUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-cream hover:bg-accent-bg transition-colors text-sm font-medium"
-                  >
-                    <svg className="w-4 h-4 text-sage-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75a1.5 1.5 0 00-1.5 1.5v13.5a1.5 1.5 0 001.5 1.5z" />
-                    </svg>
-                    View Back Side
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
-          {booking.aadharDeletedAt && !booking.aadhar && (
-            <div className="border border-border rounded-xl bg-cream-light px-4 sm:px-6 py-4">
-              <p className="text-sm text-muted">
-                Aadhaar documents were automatically deleted on{" "}
-                {new Date(booking.aadharDeletedAt).toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}{" "}
-                per the 30-day retention policy.
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Right sidebar */}

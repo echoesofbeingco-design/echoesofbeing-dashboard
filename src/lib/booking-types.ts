@@ -25,13 +25,9 @@ export interface Booking {
     communicationConsent?: boolean;
     notes?: string;
   };
-  aadhar?: {
-    frontUrl?: string;
-    backUrl?: string;
-    frontPublicId?: string;
-    backPublicId?: string;
-  } | null;
-  aadharDeletedAt?: string;
+  emailVerified?: boolean;
+  emailVerifiedAt?: string;
+  source?: string;
   updatedAt?: string;
 }
 

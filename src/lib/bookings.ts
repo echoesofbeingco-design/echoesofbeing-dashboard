@@ -39,7 +39,7 @@ function normalizeBooking(id: string, data: Record<string, unknown>): Booking {
     id,
     createdAt: normalizeTimestamp(data.createdAt) || "",
     updatedAt: normalizeTimestamp(data.updatedAt) || undefined,
-    aadharDeletedAt: normalizeTimestamp(data.aadharDeletedAt) || undefined,
+    emailVerifiedAt: normalizeTimestamp(data.emailVerifiedAt) || undefined,
   } as Booking;
 }
 
