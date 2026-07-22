@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use, useCallback } from "react";
+import { displayAge } from "@/lib/age";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/Toast";
@@ -376,7 +377,7 @@ export default function ClientDetailPage({
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(10);
     pdf.setTextColor(200, 220, 200);
-    const subtitle = [client.age ? `${client.age}y` : "", client.gender, client.pronouns].filter(Boolean).join(" · ");
+    const subtitle = [displayAge(client), client.gender, client.pronouns].filter(Boolean).join(" · ");
     pdf.text(subtitle, margin + 8, y + 26);
     y += 45;
 
@@ -542,7 +543,7 @@ export default function ClientDetailPage({
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 lg:p-10">
+      <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-accent-bg rounded w-32" />
           <div className="h-8 bg-accent-bg rounded w-64" />
@@ -567,7 +568,7 @@ export default function ClientDetailPage({
   const isClinicalTab = ["client-overview", "interpersonal", "themes", "theoretical", "treatment"].includes(activeTab);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       {/* New Session Modal */}
       {showNewSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -614,7 +615,7 @@ export default function ClientDetailPage({
         <div className="min-w-0">
           <h1 className="font-serif text-2xl md:text-3xl font-medium truncate">{client.name}</h1>
           <p className="text-muted text-sm mt-1">
-            {client.age}y &middot; {client.gender} &middot; {client.pronouns}
+            {displayAge(client)} &middot; {client.gender} &middot; {client.pronouns}
           </p>
         </div>
         <div className="flex items-center gap-3 self-start flex-shrink-0">
@@ -687,7 +688,7 @@ export default function ClientDetailPage({
                 <InfoField label="Full Name" value={client.name} />
                 <InfoField label="Email" value={client.email} />
                 <InfoField label="WhatsApp" value={`+91 ${client.whatsapp}`} />
-                <InfoField label="Age" value={client.age} />
+                <InfoField label="Age" value={displayAge(client)} />
                 <InfoField label="Gender" value={client.gender} />
                 <InfoField label="Pronouns" value={client.pronouns || "Not specified"} />
                 <div className="sm:col-span-2">

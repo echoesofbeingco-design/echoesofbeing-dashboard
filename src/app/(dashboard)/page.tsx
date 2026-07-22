@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { STATUS_LABELS } from "@/lib/booking-types";
+import SessionsCalendar from "@/components/SessionsCalendar";
+import ActivityFeed from "@/components/ActivityFeed";
 
 interface Stats {
   total: number;
@@ -65,7 +67,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="p-6 lg:p-10">
+      <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-accent-bg rounded w-48" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -83,7 +85,7 @@ export default function DashboardPage() {
     (stats?.byStatus?.slot_reserved || 0);
 
   return (
-    <div className="p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-serif text-2xl md:text-3xl font-medium">
@@ -144,6 +146,12 @@ export default function DashboardPage() {
           }
           href="/clients"
         />
+      </div>
+
+      {/* Calendar + activity */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SessionsCalendar />
+        <ActivityFeed limit={5} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

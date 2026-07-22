@@ -8,6 +8,7 @@ export interface Client {
   email: string;
   whatsapp: string;
   age: string;
+  dateOfBirth?: string;
   gender: string;
   pronouns: string;
   occupation: string;

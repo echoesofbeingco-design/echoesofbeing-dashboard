@@ -164,7 +164,7 @@ export default function UsersPage() {
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 lg:p-10">
+      <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-accent-bg rounded w-40" />
           <div className="h-64 bg-accent-bg rounded-xl" />
@@ -174,7 +174,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       {/* Reset Password Modal */}
       {resetTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

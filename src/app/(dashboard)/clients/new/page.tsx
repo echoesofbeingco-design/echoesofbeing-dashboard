@@ -100,7 +100,7 @@ export default function NewClientPage() {
     }`;
 
   return (
-    <div className="p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       <Link
         href="/clients"
         className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-forest mb-6 transition-colors"

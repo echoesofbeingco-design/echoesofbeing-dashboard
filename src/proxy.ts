@@ -12,8 +12,15 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Public paths that don't need auth
-  if (pathname === "/login" || pathname === "/api/auth/login") {
+  // Public paths that don't need auth.
+  // The Google OAuth callback is reached via a cross-site redirect from
+  // Google, so the SameSite=Strict session cookie is NOT sent with it. It
+  // authenticates itself with a signed, single-use state cookie instead.
+  if (
+    pathname === "/login" ||
+    pathname === "/api/auth/login" ||
+    pathname === "/api/google/callback"
+  ) {
     // Add security headers to public pages too
     const response = NextResponse.next();
     addSecurityHeaders(response);

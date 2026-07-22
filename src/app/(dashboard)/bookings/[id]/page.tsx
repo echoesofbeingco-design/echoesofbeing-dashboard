@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use, useCallback } from "react";
+import { displayAge } from "@/lib/age";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { STATUS_LABELS, type Booking } from "@/lib/booking-types";
@@ -49,13 +50,24 @@ export default function BookingDetailPage({
         throw new Error(data.error || "Failed to update status");
       }
 
-      const statusLabel =
-        STATUS_LABELS[newStatus]?.label || newStatus;
+      const result = await res.json();
+      const statusLabel = STATUS_LABELS[newStatus]?.label || newStatus;
 
-      setBooking((prev) =>
-        prev ? { ...prev, status: newStatus, updatedAt: new Date().toISOString() } : prev
+      // Refetch rather than patching locally: cancelling clears the calendar
+      // event server-side, so a local patch would leave a stale Meet link.
+      const refreshed = await fetch(
+        `/api/bookings/${encodeURIComponent(id)}`
+      ).then((r) => r.json());
+      if (refreshed.booking) setBooking(refreshed.booking);
+
+      showToast(
+        result.slotReleased
+          ? `Status updated to "${statusLabel}". The time slot has been freed and the calendar event removed.`
+          : result.slotReacquired
+          ? `Status updated to "${statusLabel}". The slot was re-reserved and put back on the calendar.`
+          : `Status updated to "${statusLabel}"`,
+        "success"
       );
-      showToast(`Status updated to "${statusLabel}"`, "success");
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Failed to update status",
@@ -124,7 +136,7 @@ export default function BookingDetailPage({
 
   if (loading) {
     return (
-      <div className="p-4 sm:p-6 lg:p-10">
+      <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-accent-bg rounded w-32" />
           <div className="h-8 bg-accent-bg rounded w-64" />
@@ -155,7 +167,7 @@ export default function BookingDetailPage({
     | undefined;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -300,7 +312,7 @@ export default function BookingDetailPage({
               <InfoField label="Full Name" value={booking.name} />
               <InfoField label="Email" value={booking.email} />
               <InfoField label="WhatsApp" value={`+91 ${booking.whatsapp}`} />
-              <InfoField label="Age" value={booking.age} />
+              <InfoField label="Age" value={displayAge(booking)} />
               <InfoField label="Gender" value={booking.gender} />
               <InfoField label="Pronouns" value={booking.pronouns || "Not specified"} />
             </div>
@@ -320,8 +332,72 @@ export default function BookingDetailPage({
             </div>
           </div>
 
-          {/* Calendly details */}
-          {booking.calendly && (
+          {/* Scheduled session (current booking system) */}
+          {booking.slot?.startISO && (
+            <div className="border border-border rounded-xl bg-cream-light">
+              <div className="px-4 sm:px-6 py-4 border-b border-border">
+                <h2 className="font-serif text-lg font-medium">
+                  Scheduled Session
+                </h2>
+              </div>
+              <div className="px-4 sm:px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <InfoField
+                  label="Date"
+                  value={new Intl.DateTimeFormat("en-IN", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                    timeZone: booking.slot.timezone || "Asia/Kolkata",
+                  }).format(new Date(booking.slot.startISO))}
+                />
+                <InfoField
+                  label="Time"
+                  value={`${new Intl.DateTimeFormat("en-GB", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                    timeZone: booking.slot.timezone || "Asia/Kolkata",
+                  }).format(new Date(booking.slot.startISO))} IST (${
+                    booking.slot.durationMin ?? "?"
+                  } min)`}
+                />
+                {booking.googleEvent?.meetLink && (
+                  <div>
+                    <p className="text-xs font-semibold tracking-wider uppercase text-muted mb-1">
+                      Video call
+                    </p>
+                    <a
+                      href={booking.googleEvent.meetLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-sage-600 underline break-all"
+                    >
+                      Join Google Meet
+                    </a>
+                  </div>
+                )}
+                {booking.googleEvent?.htmlLink && (
+                  <div>
+                    <p className="text-xs font-semibold tracking-wider uppercase text-muted mb-1">
+                      Calendar
+                    </p>
+                    <a
+                      href={booking.googleEvent.htmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-sage-600 underline break-all"
+                    >
+                      Open in Google Calendar
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Legacy Calendly details (bookings made before the switch) */}
+          {!booking.slot?.startISO && booking.calendly && (
             <div className="border border-border rounded-xl bg-cream-light">
               <div className="px-4 sm:px-6 py-4 border-b border-border">
                 <h2 className="font-serif text-lg font-medium">

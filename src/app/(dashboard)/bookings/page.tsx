@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { displayAge } from "@/lib/age";
 import Link from "next/link";
 import { STATUS_LABELS, type Booking } from "@/lib/booking-types";
 
@@ -14,58 +15,77 @@ export default function BookingsPage() {
   const [sortField, setSortField] = useState<"createdAt" | "name" | "status">("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+  // Server-side paging: the list used to pull every booking (with clinical
+  // notes) into the browser at once.
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const PAGE_SIZE = 20;
+
+  // Debounce typing so we don't fire a request per keystroke.
   useEffect(() => {
-    fetch("/api/bookings")
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Any filter change resets to the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, categoryFilter, sessionTypeFilter]);
+
+  useEffect(() => {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
+    });
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (categoryFilter !== "all") params.set("category", categoryFilter);
+    if (sessionTypeFilter !== "all")
+      params.set("sessionType", sessionTypeFilter);
+
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/bookings?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         setBookings(data.bookings || []);
+        setTotal(data.total ?? 0);
+        setTotalPages(data.totalPages ?? 1);
         setLoading(false);
-      });
-  }, []);
+      })
+      .catch(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedSearch, statusFilter, categoryFilter, sessionTypeFilter]);
 
-  // Extract unique values for filters
+  // Filter dropdown options — fixed lists rather than values derived from the
+  // current page, which would change as you page through.
   const categories = useMemo(
-    () => [...new Set(bookings.map((b) => b.category).filter(Boolean))],
-    [bookings]
+    () => [
+      "Relationships",
+      "Loneliness",
+      "Anxiety",
+      "Depression",
+      "Trauma",
+      "Self-Esteem",
+      "Women's Issues",
+      "Other / Not sure",
+    ],
+    []
   );
   const sessionTypes = useMemo(
-    () => [...new Set(bookings.map((b) => b.sessionType).filter(Boolean))],
-    [bookings]
+    () => ["Introductory consultation", "Individual therapy"],
+    []
   );
 
-  // Filter and search
+  // Sorting applies within the current page.
   const filtered = useMemo(() => {
-    let result = [...bookings];
-
-    // Search
-    if (search.trim()) {
-      const q = search.toLowerCase().trim();
-      result = result.filter(
-        (b) =>
-          b.name?.toLowerCase().includes(q) ||
-          b.email?.toLowerCase().includes(q) ||
-          b.whatsapp?.includes(q) ||
-          b.concern?.toLowerCase().includes(q) ||
-          b.id?.toLowerCase().includes(q)
-      );
-    }
-
-    // Status filter
-    if (statusFilter !== "all") {
-      result = result.filter((b) => b.status === statusFilter);
-    }
-
-    // Category filter
-    if (categoryFilter !== "all") {
-      result = result.filter((b) => b.category === categoryFilter);
-    }
-
-    // Session type filter
-    if (sessionTypeFilter !== "all") {
-      result = result.filter((b) => b.sessionType === sessionTypeFilter);
-    }
-
-    // Sort
+    const result = [...bookings];
     result.sort((a, b) => {
       let cmp = 0;
       if (sortField === "createdAt") {
@@ -79,9 +99,8 @@ export default function BookingsPage() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-
     return result;
-  }, [bookings, search, statusFilter, categoryFilter, sessionTypeFilter, sortField, sortDir]);
+  }, [bookings, sortField, sortDir]);
 
   function toggleSort(field: "createdAt" | "name" | "status") {
     if (sortField === field) {
@@ -94,7 +113,7 @@ export default function BookingsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 lg:p-10">
+      <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-accent-bg rounded w-40" />
           <div className="h-12 bg-accent-bg rounded" />
@@ -107,7 +126,7 @@ export default function BookingsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
@@ -115,7 +134,7 @@ export default function BookingsPage() {
             Bookings
           </h1>
           <p className="text-muted text-sm mt-1">
-            {filtered.length} of {bookings.length} bookings shown
+            {total} booking{total === 1 ? "" : "s"}
           </p>
         </div>
         <Link
@@ -281,7 +300,7 @@ export default function BookingsPage() {
                         <div>
                           <p className="text-sm font-medium group-hover:text-sage-600 transition-colors">{booking.name}</p>
                           <p className="text-xs text-muted">
-                            {booking.age}y &middot; {booking.gender}
+                            {displayAge(booking)} &middot; {booking.gender}
                             {booking.pronouns ? ` (${booking.pronouns})` : ""}
                           </p>
                         </div>
@@ -376,6 +395,35 @@ export default function BookingsPage() {
           )}
         </div>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 mt-6">
+          <p className="text-sm text-muted">
+            Showing {(page - 1) * PAGE_SIZE + 1}–
+            {Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+              className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-accent-bg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-muted px-2">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || loading}
+              className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-accent-bg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

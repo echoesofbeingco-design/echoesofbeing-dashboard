@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/Toast";
@@ -25,6 +25,41 @@ export default function NewBookingPage() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // ── Optional scheduling: pick a real slot and put it on the calendar ──
+  const [scheduleNow, setScheduleNow] = useState(false);
+  const [sessionTypes, setSessionTypes] = useState<
+    { id: string; label: string; durationMin: number }[]
+  >([]);
+  const [sessionTypeId, setSessionTypeId] = useState("");
+  const [slotDays, setSlotDays] = useState<
+    { date: string; slots: { startMs: number; label: string }[] }[]
+  >([]);
+  const [slotDate, setSlotDate] = useState("");
+  const [selectedStartMs, setSelectedStartMs] = useState<number | null>(null);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  useEffect(() => {
+    if (!scheduleNow) return;
+    fetch("/api/bookings/availability")
+      .then((r) => r.json())
+      .then((d) => setSessionTypes(d.sessionTypes ?? []))
+      .catch(() => {});
+  }, [scheduleNow]);
+
+  useEffect(() => {
+    if (!scheduleNow || !sessionTypeId) return;
+    setLoadingSlots(true);
+    setSelectedStartMs(null);
+    fetch(`/api/bookings/availability?type=${encodeURIComponent(sessionTypeId)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setSlotDays(d.days ?? []);
+        setSlotDate(d.days?.[0]?.date ?? "");
+      })
+      .catch(() => showToast("Could not load available times", "error"))
+      .finally(() => setLoadingSlots(false));
+  }, [scheduleNow, sessionTypeId]);
 
   function updateField(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -76,6 +111,9 @@ export default function NewBookingPage() {
             form.pronouns === "Other"
               ? `Other: ${pronounsOther.trim()}`
               : form.pronouns,
+          ...(scheduleNow && sessionTypeId && selectedStartMs
+            ? { sessionTypeId, startMs: selectedStartMs }
+            : {}),
         }),
       });
 
@@ -105,7 +143,7 @@ export default function NewBookingPage() {
     }`;
 
   return (
-    <div className="p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       <Link
         href="/bookings"
         className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-forest mb-6 transition-colors"
@@ -347,10 +385,114 @@ export default function NewBookingPage() {
           </div>
         </div>
 
+        {/* ── Schedule a slot (optional) ── */}
+        <div className="border border-border rounded-xl bg-cream-light">
+          <div className="px-4 sm:px-6 py-4 border-b border-border">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={scheduleNow}
+                onChange={(e) => setScheduleNow(e.target.checked)}
+                className="w-4 h-4 rounded border-border"
+              />
+              <span className="font-serif text-lg font-medium">
+                Schedule a session now
+              </span>
+            </label>
+            <p className="text-xs text-muted mt-1 ml-7">
+              Reserves the slot, adds it to the calendar with a Meet link and
+              invites the client. Leave unticked to just record the intake.
+            </p>
+          </div>
+
+          {scheduleNow && (
+            <div className="px-4 sm:px-6 py-5 space-y-5">
+              <div>
+                <label className="text-xs font-semibold tracking-wider uppercase block mb-2">
+                  Session length
+                </label>
+                <select
+                  value={sessionTypeId}
+                  onChange={(e) => setSessionTypeId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-sm"
+                >
+                  <option value="">Select…</option>
+                  {sessionTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label} ({t.durationMin} min)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {loadingSlots && (
+                <p className="text-sm text-muted">Loading available times…</p>
+              )}
+
+              {!loadingSlots && sessionTypeId && slotDays.length === 0 && (
+                <p className="text-sm text-muted">
+                  No open times in the booking window.
+                </p>
+              )}
+
+              {!loadingSlots && slotDays.length > 0 && (
+                <>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {slotDays.map((d) => (
+                      <button
+                        key={d.date}
+                        type="button"
+                        onClick={() => {
+                          setSlotDate(d.date);
+                          setSelectedStartMs(null);
+                        }}
+                        className={`flex-shrink-0 px-3 py-2 rounded-lg border text-xs ${
+                          d.date === slotDate
+                            ? "border-sage-500 bg-white"
+                            : "border-border hover:border-sage-400"
+                        }`}
+                      >
+                        {new Intl.DateTimeFormat("en-GB", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                          timeZone: "UTC",
+                        }).format(new Date(`${d.date}T00:00:00Z`))}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                    {(slotDays.find((d) => d.date === slotDate)?.slots ?? []).map(
+                      (s) => (
+                        <button
+                          key={s.startMs}
+                          type="button"
+                          onClick={() => setSelectedStartMs(s.startMs)}
+                          className={`py-2 rounded-lg border text-sm ${
+                            selectedStartMs === s.startMs
+                              ? "border-sage-500 bg-forest text-cream"
+                              : "border-border hover:border-sage-400 bg-white"
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-3">
           <button
             type="submit"
-            disabled={saving}
+            disabled={
+              saving ||
+              (scheduleNow && (!sessionTypeId || selectedStartMs === null))
+            }
             className="bg-forest text-cream px-6 py-3 rounded-lg text-sm font-medium hover:bg-sage-700 transition-colors disabled:opacity-50"
           >
             {saving ? "Creating..." : "Create Booking"}

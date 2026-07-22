@@ -108,7 +108,7 @@ export default function SessionDetailPage({
 
   if (loading || !form) {
     return (
-      <div className="p-4 sm:p-6 lg:p-10">
+      <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-accent-bg rounded w-32" />
           <div className="h-8 bg-accent-bg rounded w-64" />
@@ -119,7 +119,7 @@ export default function SessionDetailPage({
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       {/* Back link */}
       <Link
         href={`/clients/${clientId}`}

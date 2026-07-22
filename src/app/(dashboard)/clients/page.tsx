@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { displayAge } from "@/lib/age";
 import Link from "next/link";
 
 interface Client {
@@ -60,7 +61,7 @@ export default function ClientsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 lg:p-10">
+      <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto">
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-accent-bg rounded w-40" />
           <div className="h-12 bg-accent-bg rounded" />
@@ -73,7 +74,7 @@ export default function ClientsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-10 animate-fade-in">
+    <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
@@ -184,7 +185,7 @@ export default function ClientsPage() {
                       <div>
                         <p className="text-sm font-medium group-hover:text-sage-600 transition-colors">{client.name}</p>
                         <p className="text-xs text-muted">
-                          {client.age}y &middot; {client.gender}
+                          {displayAge(client)} &middot; {client.gender}
                           {client.pronouns ? ` (${client.pronouns})` : ""}
                         </p>
                       </div>
@@ -250,7 +251,7 @@ export default function ClientsPage() {
                 <div className="flex items-center gap-2 text-xs text-muted">
                   <span>{client.occupation || "N/A"}</span>
                   <span>&middot;</span>
-                  <span>{client.age}y</span>
+                  <span>{displayAge(client)}</span>
                   <span>&middot;</span>
                   <span>
                     {new Date(client.createdAt).toLocaleDateString("en-IN", {

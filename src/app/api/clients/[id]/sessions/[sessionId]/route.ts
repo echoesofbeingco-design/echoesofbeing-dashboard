@@ -98,7 +98,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; sessionId: string }> }
 ) {
-  const auth = requireAuth(request);
+  // Deleting clinical notes is destructive and irreversible — admin only.
+  const auth = requireAuth(request, "admin");
   if ("error" in auth) return auth.error;
 
   try {

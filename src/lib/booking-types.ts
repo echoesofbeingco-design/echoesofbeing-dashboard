@@ -12,6 +12,23 @@ export interface Booking {
   status: string;
   clientId?: string;
   createdAt: string;
+  /** Current booking system: the slot the client chose. */
+  slot?: {
+    startMs?: number;
+    endMs?: number;
+    startISO?: string;
+    endISO?: string;
+    durationMin?: number;
+    timezone?: string;
+    sessionTypeId?: string;
+  };
+  /** Google Calendar event created for this booking. */
+  googleEvent?: {
+    eventId?: string;
+    htmlLink?: string;
+    meetLink?: string;
+  };
+  /** Legacy — bookings made through Calendly before the switch. */
   calendly?: {
     eventName?: string;
     eventDate?: string;
