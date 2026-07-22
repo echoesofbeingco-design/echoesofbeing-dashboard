@@ -448,7 +448,10 @@ export async function getPendingTherapistHomework(): Promise<
   //    in memory below, which keeps this a single, index-free query.
   const [clientsSnap, sessionsSnap] = await Promise.all([
     db.collection("clients").where("status", "==", "active").select("name").get(),
-    db.collectionGroup("sessions").get(),
+    // Projection matters here: without it this pulls every field of every
+    // session ever recorded — including the full clinical notes — on each
+    // dashboard load. We only need these two fields.
+    db.collectionGroup("sessions").select("therapistHomework", "date").get(),
   ]);
 
   // Build a lookup map: clientId → name

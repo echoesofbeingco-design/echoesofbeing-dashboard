@@ -5,6 +5,7 @@ import { getAdminDb } from "@/lib/firebase-admin";
 import { deleteEvent } from "@/lib/google-calendar";
 import { sendCancellationEmails } from "@/lib/email";
 import { logActivity } from "@/lib/activity";
+import { sendTelegramAlert } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,25 @@ export async function DELETE(
         timezone: data.slot.timezone ?? "Asia/Kolkata",
       }).catch((e) => console.error("Cancellation emails failed:", e));
     }
+
+    await sendTelegramAlert({
+      event: "booking_cancelled",
+      client: data?.name ?? "A client",
+      session: data?.sessionType ?? "Session",
+      when: data?.slot?.startISO
+        ? new Intl.DateTimeFormat("en-GB", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone: data.slot.timezone ?? "Asia/Kolkata",
+          }).format(new Date(data.slot.startISO))
+        : "unscheduled",
+      note: `Booking deleted from the dashboard by ${auth.payload.username}. The slot is free again.`,
+      source: "dashboard",
+    }).catch((e) => console.error("Telegram alert failed:", e));
 
     await logActivity({
       type: "booking_deleted",

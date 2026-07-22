@@ -16,10 +16,14 @@ export function proxy(request: NextRequest) {
   // The Google OAuth callback is reached via a cross-site redirect from
   // Google, so the SameSite=Strict session cookie is NOT sent with it. It
   // authenticates itself with a signed, single-use state cookie instead.
+  // Cron jobs are invoked by Vercel with no session cookie, so they cannot pass
+  // the check below. They authenticate themselves against CRON_SECRET instead —
+  // see /api/cron/reminders, which rejects anything without the right Bearer.
   if (
     pathname === "/login" ||
     pathname === "/api/auth/login" ||
-    pathname === "/api/google/callback"
+    pathname === "/api/google/callback" ||
+    pathname.startsWith("/api/cron/")
   ) {
     // Add security headers to public pages too
     const response = NextResponse.next();

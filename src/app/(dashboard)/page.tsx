@@ -48,21 +48,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
 
+  // One request, not five — see the note in /api/dashboard/summary.
   useEffect(() => {
-    Promise.all([
-      fetch("/api/bookings/stats").then((r) => r.json()),
-      fetch("/api/bookings").then((r) => r.json()),
-      fetch("/api/auth/me").then((r) => r.json()),
-      fetch("/api/clients/stats").then((r) => r.json()).catch(() => ({ stats: null })),
-      fetch("/api/clients/homework").then((r) => r.json()).catch(() => ({ tasks: [] })),
-    ]).then(([statsData, bookingsData, userData, clientStatsData, homeworkData]) => {
-      setStats(statsData.stats);
-      setRecentBookings((bookingsData.bookings || []).slice(0, 5));
-      setUser(userData);
-      setClientStats(clientStatsData.stats || null);
-      setHomeworkTasks(homeworkData.tasks || []);
-      setLoading(false);
-    });
+    fetch("/api/dashboard/summary")
+      .then((r) => r.json())
+      .then((data) => {
+        setStats(data.stats ?? null);
+        setRecentBookings(data.recentBookings ?? []);
+        setUser(data.user ?? null);
+        setClientStats(data.clientStats ?? null);
+        setHomeworkTasks(data.homeworkTasks ?? []);
+      })
+      .catch(() => {
+        /* leave the empty state in place */
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) {

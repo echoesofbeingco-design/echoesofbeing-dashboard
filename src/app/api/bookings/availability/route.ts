@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
     .collection("bookings")
     .where("slot.startMs", ">=", fromMs - EDGE_PAD_MS)
     .where("slot.startMs", "<=", toMs + EDGE_PAD_MS)
+    .select("status", "slot")
     .get();
 
   const busy: BusyInterval[] = [];

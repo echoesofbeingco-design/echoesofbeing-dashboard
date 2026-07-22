@@ -4,6 +4,7 @@ import { getAdminDb } from "@/lib/firebase-admin";
 import { createEvent } from "@/lib/google-calendar";
 import { findOrCreateClient } from "@/lib/client-matching";
 import { logActivity } from "@/lib/activity";
+import { sendTelegramAlert } from "@/lib/telegram";
 import {
   ADMIN_EMAIL,
   emailShell,
@@ -222,6 +223,7 @@ export async function POST(request: NextRequest) {
             .collection("bookings")
             .where("slot.startMs", ">=", startMs - windowMs)
             .where("slot.startMs", "<=", startMs + windowMs)
+            .select("status", "slot")
         );
 
         if (lockSnap.exists) throw new SlotTakenError();
@@ -358,6 +360,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Narrowed once so both the email and the Telegram alert can read it.
+    const scheduledSlot =
+      scheduling && slotPayload
+        ? (slotPayload as {
+            startISO: string;
+            endISO: string;
+            timezone: string;
+          })
+        : null;
+
     // Notify the practice (and the client, when an actual time was booked).
     await sendBookingNotifications({
       bookingId: bookingRef.id,
@@ -378,6 +390,25 @@ export async function POST(request: NextRequest) {
           : null,
       meetLink,
     }).catch((e) => console.error("Booking notifications failed:", e));
+
+    await sendTelegramAlert({
+      event: "booking_created",
+      client: name.trim(),
+      session: sessionType,
+      when: scheduledSlot
+        ? new Intl.DateTimeFormat("en-GB", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone: scheduledSlot.timezone ?? "Asia/Kolkata",
+          }).format(new Date(scheduledSlot.startISO))
+        : "not scheduled yet",
+      note: `Added from the dashboard by ${auth.payload.username}.`,
+      source: "dashboard",
+    }).catch((e) => console.error("Telegram alert failed:", e));
 
     await logActivity({
       type: "booking_created",

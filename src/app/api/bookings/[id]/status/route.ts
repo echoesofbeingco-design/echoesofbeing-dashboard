@@ -3,6 +3,7 @@ import { requireAuth, sanitizeId, withSecurityHeaders } from "@/lib/auth";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { createEvent, deleteEvent } from "@/lib/google-calendar";
 import { sendCancellationEmails } from "@/lib/email";
+import { sendTelegramAlert } from "@/lib/telegram";
 import { logActivity } from "@/lib/activity";
 import {
   normalizeConfig,
@@ -27,6 +28,20 @@ const VALID_STATUSES = [
 const RELEASED = new Set(["cancelled"]);
 
 class SlotTakenError extends Error {}
+
+/** "Fri 24 Jul, 10:00" in the booking's own timezone, for alerts. */
+function whenLabel(slot?: { startISO?: string; timezone?: string }): string {
+  if (!slot?.startISO) return "unscheduled";
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: slot.timezone ?? "Asia/Kolkata",
+  }).format(new Date(slot.startISO));
+}
 
 interface BookingSlot {
   startMs?: number;
@@ -131,6 +146,15 @@ export async function PATCH(
         }).catch((e) => console.error("Cancellation emails failed:", e));
       }
 
+      await sendTelegramAlert({
+        event: "booking_cancelled",
+        client: booking.name ?? "A client",
+        session: booking.sessionType ?? "Session",
+        when: whenLabel(slot),
+        note: `Cancelled from the dashboard by ${auth.payload.username}. The slot is free again.`,
+        source: "dashboard",
+      }).catch((e) => console.error("Telegram alert failed:", e));
+
       await logActivity({
         type: "booking_cancelled",
         message: `Session cancelled — ${booking.name ?? "client"}${
@@ -184,6 +208,7 @@ export async function PATCH(
               .collection("bookings")
               .where("slot.startMs", ">=", startMs - windowMs)
               .where("slot.startMs", "<=", startMs + windowMs)
+              .select("status", "slot")
           );
 
           if (lockSnap.exists) throw new SlotTakenError();
@@ -271,6 +296,17 @@ export async function PATCH(
 
     /* ── Ordinary status change ── */
     await ref.update({ status, updatedAt: nowIso });
+
+    await sendTelegramAlert({
+      event: "booking_status",
+      client: booking.name ?? "A client",
+      session: booking.sessionType ?? "Session",
+      when: whenLabel(slot),
+      note: `Status is now "${status.replace(/_/g, " ")}" (changed by ${
+        auth.payload.username
+      }).`,
+      source: "dashboard",
+    }).catch((e) => console.error("Telegram alert failed:", e));
 
     await logActivity({
       type: "booking_status_changed",

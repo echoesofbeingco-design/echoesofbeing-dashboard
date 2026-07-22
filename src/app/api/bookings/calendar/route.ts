@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
       .collection("bookings")
       .where("slot.startMs", ">=", startMs)
       .where("slot.startMs", "<", endMs)
+      .select("name", "sessionType", "status", "slot", "googleEvent")
       .get();
 
     const sessions: CalendarSession[] = [];

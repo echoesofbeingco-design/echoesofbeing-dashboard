@@ -55,6 +55,44 @@ export async function getAllBookings(): Promise<Booking[]> {
   );
 }
 
+/**
+ * The N most recent bookings, fetching only the fields the home page list
+ * renders. The page previously pulled every booking with every field and threw
+ * away all but five.
+ */
+export async function getRecentBookings(limit: number): Promise<
+  Array<{
+    id: string;
+    name: string;
+    email: string;
+    status: string;
+    createdAt: string;
+    sessionType: string;
+    category: string;
+  }>
+> {
+  const db = getAdminDb();
+  const snapshot = await db
+    .collection("bookings")
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .select("name", "email", "status", "createdAt", "sessionType", "category")
+    .get();
+
+  return snapshot.docs.map((doc) => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      name: (d.name as string) || "",
+      email: (d.email as string) || "",
+      status: (d.status as string) || "",
+      createdAt: normalizeTimestamp(d.createdAt) || "",
+      sessionType: (d.sessionType as string) || "",
+      category: (d.category as string) || "",
+    };
+  });
+}
+
 export async function getBookingById(id: string): Promise<Booking | null> {
   const db = getAdminDb();
   const doc = await db.collection("bookings").doc(id).get();

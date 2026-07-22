@@ -543,6 +543,156 @@ function SlotMaintenanceCard() {
   );
 }
 
+/* ───────────────────────────  Telegram alerts  ─────────────────────────── */
+
+interface TelegramStatus {
+  hasToken: boolean;
+  configured: boolean;
+  configuredChatIds: string[];
+  availableChats: Array<{ id: string; name: string; type: string }>;
+}
+
+function TelegramCard() {
+  const [status, setStatus] = useState<TelegramStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(
+    null
+  );
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/settings/telegram");
+      if (res.ok) setStatus(await res.json());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function sendTest() {
+    setTesting(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/settings/telegram", { method: "POST" });
+      const data = await res.json();
+      setMessage(
+        res.ok
+          ? { text: "Test alert sent. Check Telegram.", ok: true }
+          : { text: data.error ?? "Could not send the test alert.", ok: false }
+      );
+    } catch {
+      setMessage({ text: "Could not reach the server.", ok: false });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <section className="bg-white rounded-2xl border border-border p-6 md:p-8">
+      <h2 className="font-serif text-xl font-medium">Telegram alerts</h2>
+      <p className="text-sm text-muted mt-1 mb-5">
+        Get a message when a booking is made, cancelled or changed, plus a
+        digest of tomorrow&apos;s sessions each morning. These go to the
+        practice only — clients never receive them.
+      </p>
+
+      {loading ? (
+        <p className="text-sm text-muted">Loading…</p>
+      ) : !status?.hasToken ? (
+        <div className="rounded-xl bg-accent-bg/60 border border-border p-4 text-sm">
+          <p className="font-medium mb-2">Not set up yet</p>
+          <ol className="list-decimal list-inside space-y-1 text-muted">
+            <li>
+              Message <strong>@BotFather</strong> on Telegram and send{" "}
+              <code className="text-xs">/newbot</code>.
+            </li>
+            <li>
+              Put the token he gives you in <code className="text-xs">.env.local</code> as{" "}
+              <code className="text-xs">TELEGRAM_BOT_TOKEN</code>, then restart.
+            </li>
+            <li>Send your new bot any message, then reload this page.</li>
+          </ol>
+        </div>
+      ) : status.availableChats.length === 0 && !status.configured ? (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm">
+          <p className="font-medium mb-1">Token found. One step left.</p>
+          <p className="text-muted">
+            Open Telegram, send your bot any message (a bot can&apos;t write to
+            you until you&apos;ve written to it), then reload this page to see
+            your chat ID.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {status.configured ? (
+            <p className="text-sm flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              Sending to {status.configuredChatIds.length} chat
+              {status.configuredChatIds.length === 1 ? "" : "s"}.
+            </p>
+          ) : (
+            <p className="text-sm text-muted">
+              Add one of these to <code className="text-xs">.env.local</code> as{" "}
+              <code className="text-xs">TELEGRAM_CHAT_ID</code> (comma-separate
+              for several), then restart.
+            </p>
+          )}
+
+          {status.availableChats.length > 0 && (
+            <ul className="divide-y divide-border border border-border rounded-xl overflow-hidden">
+              {status.availableChats.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex items-center justify-between px-4 py-3 text-sm"
+                >
+                  <span>
+                    {c.name}{" "}
+                    <span className="text-xs text-muted">({c.type})</span>
+                  </span>
+                  <code className="text-xs bg-accent-bg px-2 py-1 rounded">
+                    {c.id}
+                  </code>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={sendTest}
+              disabled={testing || !status.configured}
+              className="bg-forest text-cream px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-sage-700 transition-colors disabled:opacity-40"
+            >
+              {testing ? "Sending…" : "Send test message"}
+            </button>
+            <button
+              onClick={load}
+              className="px-4 py-2.5 rounded-lg border border-border text-sm hover:bg-accent-bg transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {message && (
+            <p
+              className={`text-sm ${
+                message.ok ? "text-green-700" : "text-red-600"
+              }`}
+            >
+              {message.text}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <div className="p-6 lg:p-8 xl:p-10 max-w-5xl">
@@ -563,6 +713,7 @@ export default function SettingsPage() {
         >
           <GoogleCalendarCard />
         </Suspense>
+        <TelegramCard />
         <AvailabilityCard />
         <SlotMaintenanceCard />
       </div>
