@@ -22,6 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
   booking_status_changed: "Status",
   booking_deleted: "Deleted",
   client_created: "Client",
+  client_deleted: "Client",
   account_deleted: "Account",
   settings_updated: "Settings",
   google_connected: "Google",

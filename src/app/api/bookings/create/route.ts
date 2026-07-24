@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { requireAuth, withSecurityHeaders } from "@/lib/auth";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { createEvent } from "@/lib/google-calendar";
-import { findOrCreateClient } from "@/lib/client-matching";
 import { logActivity } from "@/lib/activity";
 import { sendTelegramAlert } from "@/lib/telegram";
 import {
@@ -167,9 +166,16 @@ export async function POST(request: NextRequest) {
       // the calendar, exactly like a website booking.
       sessionTypeId,
       startMs,
+      // Every booking belongs to a client. Create the client first, then book.
+      clientId: providedClientId,
     } = body;
 
     const errors: string[] = [];
+    if (!providedClientId?.trim()) {
+      errors.push(
+        "A booking must belong to a client. Create or pick the client first."
+      );
+    }
     if (!name?.trim()) errors.push("Name is required");
     if (!email?.trim()) errors.push("Email is required");
     if (!whatsapp?.trim()) errors.push("WhatsApp number is required");
@@ -189,6 +195,21 @@ export async function POST(request: NextRequest) {
     const db = getAdminDb();
     const now = new Date().toISOString();
     const cleanEmail = email.trim().toLowerCase();
+
+    // Confirm the client is real before anything else — a booking that points
+    // at a non-existent client would be worse than no booking at all.
+    const clientSnap = await db
+      .collection("clients")
+      .doc(providedClientId.trim())
+      .get();
+    if (!clientSnap.exists) {
+      return withSecurityHeaders(
+        Response.json(
+          { error: "That client no longer exists. Pick or create one first." },
+          { status: 404 }
+        )
+      );
+    }
 
     const scheduling =
       typeof startMs === "number" && Number.isFinite(startMs) && sessionTypeId;
@@ -313,21 +334,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Reuse an existing client where one exists — matched on email OR phone,
-    // so the same person never ends up with two clinical files.
-    const match = await findOrCreateClient(
-      db,
-      {
-        name: name.trim(),
-        email: cleanEmail,
-        whatsapp: whatsapp.trim(),
-        age: String(age),
-        gender,
-        pronouns,
-      },
-      bookingRef.id
-    );
-    const clientId = match.clientId;
+    // The client was resolved before the booking document was written.
+    const clientId = providedClientId.trim();
     await bookingRef.update({ clientId });
 
     // Put it on the calendar with a Meet link and invite the client.
@@ -439,13 +447,9 @@ export async function POST(request: NextRequest) {
         {
           id: bookingRef.id,
           clientId,
-          clientCreated: match.created,
-          clientMatchedBy: match.matchedBy,
           scheduled: Boolean(scheduling),
           meetLink,
-          message: match.created
-            ? "Booking created successfully"
-            : `Booking created and linked to the existing client (matched by ${match.matchedBy}).`,
+          message: "Booking created",
         },
         { status: 201 }
       )

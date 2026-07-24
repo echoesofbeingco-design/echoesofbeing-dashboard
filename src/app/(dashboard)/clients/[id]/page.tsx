@@ -6,6 +6,19 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/Toast";
 import MindMap from "@/components/MindMap";
+import ConfirmDialog from "@/components/ConfirmDialog";
+
+interface ClientBooking {
+  id: string;
+  sessionType: string;
+  status: string;
+  category: string;
+  startISO: string | null;
+  startMs: number | null;
+  timezone: string;
+  meetLink: string | null;
+  createdAt: string;
+}
 
 type ClientTab = "overview" | "client-overview" | "interpersonal" | "themes" | "theoretical" | "treatment" | "sessions" | "mindmap";
 
@@ -65,6 +78,16 @@ interface SessionSummary {
   clientHomework: string;
 }
 
+const BOOKING_STATUS: Record<string, { label: string; color: string }> = {
+  intake_submitted: { label: "Intake Submitted", color: "bg-gray-100 text-gray-800" },
+  slot_reserved: { label: "Slot Reserved", color: "bg-blue-100 text-blue-800" },
+  pending_payment: { label: "Pending Payment", color: "bg-amber-100 text-amber-800" },
+  payment_received: { label: "Payment Received", color: "bg-emerald-100 text-emerald-800" },
+  session_completed: { label: "Completed", color: "bg-sage-300/40 text-forest" },
+  cancelled: { label: "Cancelled", color: "bg-red-100 text-red-800" },
+  no_show: { label: "No Show", color: "bg-orange-100 text-orange-800" },
+};
+
 const STATUS_OPTIONS = [
   { value: "active", label: "Active", color: "bg-emerald-100 text-emerald-800" },
   { value: "inactive", label: "Inactive", color: "bg-amber-100 text-amber-800" },
@@ -99,6 +122,11 @@ export default function ClientDetailPage({
   const { showToast } = useToast();
   const [client, setClient] = useState<Client | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [clientBookings, setClientBookings] = useState<ClientBooking[]>([]);
+  const [inviting, setInviting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [role, setRole] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ClientTab>("overview");
 
@@ -161,6 +189,66 @@ export default function ClientDetailPage({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Bookings belonging to this client — shown in the Sessions tab.
+  useEffect(() => {
+    fetch(`/api/clients/${id}/bookings`)
+      .then((r) => r.json())
+      .then((d) => setClientBookings(d.bookings ?? []))
+      .catch(() => setClientBookings([]));
+  }, [id]);
+
+  // Only admins may delete a client, so only they see the control.
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setRole(d.role ?? ""))
+      .catch(() => setRole(""));
+  }, []);
+
+  async function handleInvite() {
+    setInviting(true);
+    try {
+      const res = await fetch(`/api/clients/${id}/invite`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Could not send the invite", "error");
+        return;
+      }
+      showToast(
+        data.accountCreated
+          ? `Account created. ${client?.name.split(" ")[0]} has been emailed a link to set their password.`
+          : "Invite email sent.",
+        "success"
+      );
+      fetchData();
+    } catch {
+      showToast("Could not send the invite", "error");
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleDeleteClient() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Could not delete this client", "error");
+        setDeleting(false);
+        return;
+      }
+      showToast(
+        `Client deleted${data.sessionsDeleted ? ` with ${data.sessionsDeleted} session note${data.sessionsDeleted === 1 ? "" : "s"}` : ""}.`,
+        "success"
+      );
+      router.push("/clients");
+    } catch {
+      showToast("Could not delete this client", "error");
+      setDeleting(false);
+    }
+  }
 
   // ── Clinical field update helpers ──
   function updateClinicalField(field: string, value: string) {
@@ -619,6 +707,16 @@ export default function ClientDetailPage({
           </p>
         </div>
         <div className="flex items-center gap-3 self-start flex-shrink-0">
+          <Link
+            href={`/clients/${id}/book`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-forest text-cream text-xs font-medium hover:bg-sage-700 transition-all"
+            title="Book sessions for this client"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5M12 12.75h.008v.008H12v-.008z" />
+            </svg>
+            Book a session
+          </Link>
           {/* Download PDF */}
           <button onClick={handleDownloadPDF}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted hover:text-forest hover:border-sage-400 hover:bg-accent-bg/50 transition-all"
@@ -776,6 +874,56 @@ export default function ClientDetailPage({
                 )}
               </div>
             </div>
+
+            <div className="border border-border rounded-xl bg-cream-light">
+              <div className="px-4 sm:px-6 py-4 border-b border-border">
+                <h2 className="font-serif text-lg font-medium">Website access</h2>
+              </div>
+              <div className="px-4 sm:px-6 py-4">
+                <p className="text-sm text-muted leading-relaxed mb-4">
+                  {client.email
+                    ? `Email ${client.name.split(" ")[0]} a link to set a password, so they can see and manage their own sessions online.`
+                    : "Add an email address above before inviting them to the website."}
+                </p>
+                <button
+                  onClick={handleInvite}
+                  disabled={inviting || !client.email}
+                  className="w-full px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:border-sage-400 hover:bg-accent-bg transition-colors disabled:opacity-40"
+                >
+                  {inviting ? "Sending…" : "Send login invite"}
+                </button>
+              </div>
+            </div>
+
+            {role === "admin" && (
+              <div className="border border-red-200 rounded-xl bg-red-50/40">
+                <div className="px-4 sm:px-6 py-4 border-b border-red-200">
+                  <h2 className="font-serif text-lg font-medium text-red-700">Danger zone</h2>
+                </div>
+                <div className="px-4 sm:px-6 py-4">
+                  <p className="text-sm text-muted leading-relaxed mb-4">
+                    Deleting {client.name} permanently removes their profile and
+                    {sessions.length > 0
+                      ? ` all ${sessions.length} session note${sessions.length === 1 ? "" : "s"}.`
+                      : " any session notes."}{" "}
+                    Past bookings are kept but unlinked. This cannot be undone.
+                  </p>
+                  {sessions.length > 0 && (
+                    <p className="text-xs text-red-700 bg-red-100/60 border border-red-200 rounded-lg px-3 py-2 mb-4 leading-relaxed">
+                      This client has attended sessions. Your Privacy Policy commits
+                      to retaining clinical records for at least three years, so
+                      consider marking them <strong>Discharged</strong> instead.
+                    </p>
+                  )}
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="px-4 py-2 rounded-lg border border-red-300 text-sm font-medium text-red-700 hover:bg-red-100 transition-colors"
+                  >
+                    Delete this client
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -879,8 +1027,66 @@ export default function ClientDetailPage({
       {/* ── TAB: Sessions ── */}
       {activeTab === "sessions" && (
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-muted">{sessions.length} session{sessions.length !== 1 ? "s" : ""} documented</p>
+          {/* ── Booked sessions (appointments) ── */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-serif text-lg font-medium">Booked sessions</h2>
+                <p className="text-sm text-muted mt-0.5">
+                  {clientBookings.length === 0
+                    ? "Nothing booked yet"
+                    : `${clientBookings.length} booking${clientBookings.length === 1 ? "" : "s"}`}
+                </p>
+              </div>
+              <Link href={`/clients/${id}/book`}
+                className="inline-flex items-center gap-2 border border-border px-4 py-2.5 rounded-lg text-sm font-medium hover:border-sage-400 hover:bg-accent-bg transition-colors">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Book a session
+              </Link>
+            </div>
+
+            {clientBookings.length === 0 ? (
+              <div className="border border-border rounded-xl bg-cream-light px-6 py-10 text-center">
+                <p className="text-muted text-sm">No sessions booked for {client.name.split(" ")[0]} yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {clientBookings.map((b) => {
+                  const info = BOOKING_STATUS[b.status] ?? { label: b.status, color: "bg-gray-100 text-gray-800" };
+                  const when = b.startISO
+                    ? new Intl.DateTimeFormat("en-GB", {
+                        weekday: "short", day: "numeric", month: "short", year: "numeric",
+                        hour: "2-digit", minute: "2-digit", hour12: false, timeZone: b.timezone,
+                      }).format(new Date(b.startISO))
+                    : "Not scheduled";
+                  const past = b.startMs !== null && b.startMs < Date.now();
+                  return (
+                    <Link key={b.id} href={`/bookings/${b.id}`}
+                      className={`flex items-center justify-between gap-4 border border-border rounded-xl px-5 py-4 hover:border-sage-400/60 transition-all ${past ? "bg-cream-light/50" : "bg-cream-light"}`}>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{when}</span>
+                        <span className="block text-xs text-muted mt-0.5 truncate">
+                          {b.sessionType}{b.category ? ` · ${b.category}` : ""}
+                        </span>
+                      </span>
+                      <span className={`flex-shrink-0 inline-flex px-2.5 py-1 rounded-full text-[11px] font-semibold ${info.color}`}>
+                        {info.label}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── Clinical notes ── */}
+          <div className="flex items-center justify-between mb-4 pt-6 border-t border-border">
+            <div>
+              <h2 className="font-serif text-lg font-medium">Session notes</h2>
+              <p className="text-sm text-muted mt-0.5">{sessions.length} session{sessions.length !== 1 ? "s" : ""} documented</p>
+            </div>
             <button onClick={() => setShowNewSession(true)}
               className="inline-flex items-center gap-2 bg-forest text-cream px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-sage-700 transition-colors">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -950,6 +1156,22 @@ export default function ClientDetailPage({
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Delete ${client.name}?`}
+        message={
+          sessions.length > 0
+            ? `This permanently removes their profile and all ${sessions.length} session note${sessions.length === 1 ? "" : "s"}. Past bookings are kept but unlinked. This cannot be undone.`
+            : "This permanently removes their profile. Past bookings are kept but unlinked. This cannot be undone."
+        }
+        confirmLabel="Delete permanently"
+        cancelLabel="Keep client"
+        danger
+        busy={deleting}
+        onConfirm={handleDeleteClient}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

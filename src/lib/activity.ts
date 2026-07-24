@@ -16,6 +16,7 @@ export type ActivityType =
   | "booking_status_changed"
   | "booking_deleted"
   | "client_created"
+  | "client_deleted"
   | "account_deleted"
   | "settings_updated"
   | "google_connected"

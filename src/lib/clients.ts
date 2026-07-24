@@ -207,6 +207,75 @@ export async function updateClient(
     });
 }
 
+/**
+ * Permanently delete a client and everything beneath them.
+ *
+ * Firestore does NOT cascade — deleting the client document would leave the
+ * `sessions` subcollection orphaned: invisible in the UI, but still returned
+ * by the `collectionGroup("sessions")` query the dashboard home page runs, and
+ * still billed as storage. So the subcollection is drained explicitly first.
+ *
+ * Any bookings that referenced this client are unlinked rather than deleted —
+ * the booking is its own record of an appointment that genuinely happened, and
+ * silently destroying appointment history from a client-delete would be a
+ * surprise. Delete those from the Bookings page if you want them gone.
+ *
+ * Returns what was removed so the caller can report it honestly.
+ */
+export async function deleteClient(
+  id: string
+): Promise<{ deleted: boolean; sessionsDeleted: number; bookingsUnlinked: number }> {
+  const db = getAdminDb();
+  const clientRef = db.collection("clients").doc(id);
+  const snap = await clientRef.get();
+  if (!snap.exists) {
+    return { deleted: false, sessionsDeleted: 0, bookingsUnlinked: 0 };
+  }
+
+  // 1. Drain the sessions subcollection in batches (500 = Firestore's limit).
+  let sessionsDeleted = 0;
+  for (;;) {
+    const batchSnap = await clientRef.collection("sessions").limit(400).get();
+    if (batchSnap.empty) break;
+    const batch = db.batch();
+    batchSnap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    sessionsDeleted += batchSnap.size;
+    if (batchSnap.size < 400) break;
+  }
+
+  // 2. Unlink bookings that point at this client.
+  const linked = await db
+    .collection("bookings")
+    .where("clientId", "==", id)
+    .select()
+    .get();
+  let bookingsUnlinked = 0;
+  if (!linked.empty) {
+    const batch = db.batch();
+    linked.docs.forEach((d) => batch.update(d.ref, { clientId: null }));
+    await batch.commit();
+    bookingsUnlinked = linked.size;
+  }
+
+  // 3. Finally the client itself.
+  await clientRef.delete();
+
+  return { deleted: true, sessionsDeleted, bookingsUnlinked };
+}
+
+/** Session count for a client — used to warn before deleting. */
+export async function countClientSessions(id: string): Promise<number> {
+  const db = getAdminDb();
+  const agg = await db
+    .collection("clients")
+    .doc(id)
+    .collection("sessions")
+    .count()
+    .get();
+  return agg.data().count;
+}
+
 // ── Sessions ──────────────────────────────────────────────────────────────
 
 const EMPTY_INTERPERSONAL: InterpersonalHistory = {

@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/Toast";
 
-export default function NewClientPage() {
+function NewClientForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Arriving from "New booking" means the point of this client is to book
+  // them a session, so go straight there instead of the empty profile.
+  const goBookAfter = searchParams.get("next") === "book";
   const { showToast } = useToast();
   const [saving, setSaving] = useState(false);
   const [genderOther, setGenderOther] = useState("");
@@ -81,7 +85,9 @@ export default function NewClientPage() {
 
       const data = await res.json();
       showToast("Client created successfully", "success");
-      router.push(`/clients/${data.id}`);
+      router.push(
+        goBookAfter ? `/clients/${data.id}/book` : `/clients/${data.id}`
+      );
     } catch (err) {
       showToast(
         err instanceof Error ? err.message : "Something went wrong",
@@ -319,5 +325,19 @@ export default function NewClientPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function NewClientPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-6 lg:p-8 xl:p-10 max-w-[1600px] mx-auto">
+          <div className="h-8 bg-accent-bg rounded w-48 animate-pulse" />
+        </div>
+      }
+    >
+      <NewClientForm />
+    </Suspense>
   );
 }
