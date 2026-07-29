@@ -14,15 +14,10 @@ import { buildIcs } from "@/lib/ics";
 import {
   getSessionType,
   normalizeConfig,
-  respectsBuffer,
-  validateSlot,
   type AvailabilityConfig,
-  type BusyInterval,
 } from "@/lib/availability";
 
 export const dynamic = "force-dynamic";
-
-const RELEASED = new Set(["cancelled"]);
 
 class SlotTakenError extends Error {}
 
@@ -231,52 +226,21 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const maxDurationMin = Math.max(
-        ...config.sessionTypes.map((s) => s.durationMin)
-      );
-      const windowMs = (config.bufferMin + maxDurationMin) * 60_000;
+      // The availability policy — working-hours window, no-Saturday, 24-hour
+      // notice, inter-session buffer — exists to shape what the PUBLIC may
+      // self-book on the website. When the practice books from the dashboard,
+      // they choose the time, so those checks are deliberately skipped here.
+      //
+      // The one guard kept is the exact-slot lock: the same start time cannot
+      // be booked twice, because a therapist can't run two sessions at the
+      // same instant and this is also what stops a manual booking from
+      // colliding with one a client just made on the website.
       const lockRef = db.collection("slot_locks").doc(String(startMs));
+      endMs = startMs + type.durationMin * 60_000;
 
       await db.runTransaction(async (t) => {
         const lockSnap = await t.get(lockRef);
-        const neighbours = await t.get(
-          db
-            .collection("bookings")
-            .where("slot.startMs", ">=", startMs - windowMs)
-            .where("slot.startMs", "<=", startMs + windowMs)
-            .select("status", "slot")
-        );
-
         if (lockSnap.exists) throw new SlotTakenError();
-
-        const busy: BusyInterval[] = [];
-        for (const doc of neighbours.docs) {
-          const d = doc.data() as {
-            status?: string;
-            slot?: { startMs?: number; endMs?: number };
-          };
-          if (RELEASED.has(d.status ?? "")) continue;
-          if (
-            typeof d.slot?.startMs === "number" &&
-            typeof d.slot?.endMs === "number"
-          ) {
-            busy.push({ startMs: d.slot.startMs, endMs: d.slot.endMs });
-          }
-        }
-
-        const check = validateSlot({
-          config: config!,
-          sessionTypeId,
-          startMs,
-          busy,
-          nowMs: Date.now(),
-        });
-        if (!check.ok) throw new SlotTakenError(check.reason);
-        endMs = check.endMs;
-
-        if (!respectsBuffer(startMs, endMs, busy, config!.bufferMin)) {
-          throw new SlotTakenError();
-        }
 
         slotPayload = {
           startMs,

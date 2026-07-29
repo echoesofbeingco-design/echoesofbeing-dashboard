@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/Toast";
+import { zonedToUtcMs } from "@/lib/availability";
+import DateTimePicker from "@/components/DateTimePicker";
 
 interface Slot {
   startISO: string;
@@ -99,6 +101,8 @@ export default function BookForClientPage({
   const [timezone, setTimezone] = useState("Asia/Kolkata");
   const [days, setDays] = useState<DaySlots[]>([]);
   const [selected, setSelected] = useState<Map<number, Slot>>(new Map());
+  const [customDate, setCustomDate] = useState("");
+  const [customTime, setCustomTime] = useState("");
   const [category, setCategory] = useState("");
   const [concern, setConcern] = useState("");
   const [loading, setLoading] = useState(true);
@@ -160,6 +164,48 @@ export default function BookForClientPage({
       else next.set(slot.startMs, slot);
       return next;
     });
+  }
+
+  /**
+   * Add any date and time, free of the public availability rules.
+   *
+   * The practice books manually here, so this is not held to the working-hours
+   * window, the no-Saturday rule or the 24-hour notice — those only shape what
+   * clients may self-book on the website. The duration still comes from the
+   * chosen session type, and the server keeps the one guard that matters: the
+   * exact same start time can't be booked twice.
+   */
+  function addCustomTime() {
+    if (!customDate || !customTime) {
+      showToast("Pick both a date and a time.", "error");
+      return;
+    }
+    const type = sessionTypes.find((t) => t.id === sessionTypeId);
+    const durationMin = type?.durationMin ?? 60;
+    const [y, m, d] = customDate.split("-").map(Number);
+    const [hh, mm] = customTime.split(":").map(Number);
+    const startMs = zonedToUtcMs(y, m, d, hh, mm, timezone);
+    const endMs = startMs + durationMin * 60_000;
+
+    // The calendar blocks past dates; this also catches today + an earlier hour.
+    if (startMs <= Date.now()) {
+      showToast("That time has already passed. Pick a time in the future.", "error");
+      return;
+    }
+    if (selected.has(startMs)) {
+      showToast("That time is already in your list.", "info");
+      return;
+    }
+    const slot: Slot = {
+      startMs,
+      endMs,
+      startISO: new Date(startMs).toISOString(),
+      endISO: new Date(endMs).toISOString(),
+      label: customTime,
+    };
+    setSelected((prev) => new Map(prev).set(startMs, slot));
+    setCustomTime("");
+    showToast(`Added ${fullWhen(startMs, timezone)}.`, "success");
   }
 
   /**
@@ -369,14 +415,46 @@ export default function BookForClientPage({
             </div>
           </section>
 
-          {/* Slots */}
+          {/* Any date & time — not held to the public booking rules. */}
+          <section className="bg-white rounded-2xl border border-border p-5 md:p-6">
+            <h2 className="font-serif text-lg font-medium">Any date &amp; time</h2>
+            <p className="text-sm text-muted mt-0.5 mb-4">
+              Book whatever time you need — outside working hours, on a weekend,
+              or at short notice. The website rules don&apos;t apply here.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
+              <div className="flex-1">
+                <DateTimePicker
+                  date={customDate}
+                  time={customTime}
+                  onDate={setCustomDate}
+                  onTime={setCustomTime}
+                  timezone={timezone}
+                />
+              </div>
+              <button
+                onClick={addCustomTime}
+                disabled={!customDate || !customTime}
+                className="px-4 py-2.5 rounded-lg bg-forest text-cream text-sm font-medium hover:bg-sage-700 transition-colors disabled:opacity-40 flex-shrink-0"
+              >
+                Add this time
+              </button>
+            </div>
+          </section>
+
+          {/* Standard slots — the quick picks within your normal hours. */}
           <section className="bg-white rounded-2xl border border-border p-5 md:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-serif text-lg font-medium">Pick times</h2>
+              <div>
+                <h2 className="font-serif text-lg font-medium">Quick picks</h2>
+                <p className="text-sm text-muted mt-0.5">
+                  Your usual open slots, for booking within working hours.
+                </p>
+              </div>
               {chosen.length > 0 && (
                 <button
                   onClick={() => setSelected(new Map())}
-                  className="text-xs text-muted hover:text-forest transition-colors"
+                  className="text-xs text-muted hover:text-forest transition-colors flex-shrink-0"
                 >
                   Clear all
                 </button>
