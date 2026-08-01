@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { STATUS_LABELS, type Booking } from "@/lib/booking-types";
 import { useToast } from "@/components/Toast";
+import DateTimePicker from "@/components/DateTimePicker";
+import { zonedToUtcMs } from "@/lib/availability";
 
 export default function BookingDetailPage({
   params,
@@ -23,6 +25,10 @@ export default function BookingDetailPage({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [reschedDate, setReschedDate] = useState("");
+  const [reschedTime, setReschedTime] = useState("");
+  const [rescheduling, setRescheduling] = useState(false);
 
   useEffect(() => {
     fetch(`/api/bookings/${encodeURIComponent(id)}`)
@@ -75,6 +81,51 @@ export default function BookingDetailPage({
       );
     } finally {
       setUpdatingStatus(false);
+    }
+  }
+
+  async function handleReschedule() {
+    if (!reschedDate || !reschedTime || !booking?.slot) return;
+    const tz = booking.slot.timezone || "Asia/Kolkata";
+    const [y, m, d] = reschedDate.split("-").map(Number);
+    const [hh, mm] = reschedTime.split(":").map(Number);
+    const startMs = zonedToUtcMs(y, m, d, hh, mm, tz);
+
+    if (startMs <= Date.now()) {
+      showToast("That time has already passed. Pick a future time.", "error");
+      return;
+    }
+
+    setRescheduling(true);
+    try {
+      const res = await fetch(
+        `/api/bookings/${encodeURIComponent(id)}/reschedule`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ startMs }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Could not reschedule", "error");
+        return;
+      }
+      const updated = await fetch(
+        `/api/bookings/${encodeURIComponent(id)}`
+      ).then((r) => r.json());
+      setBooking(updated.booking);
+      setShowReschedule(false);
+      setReschedDate("");
+      setReschedTime("");
+      showToast(
+        "Session moved. Both sides have been emailed and the calendar updated.",
+        "success"
+      );
+    } catch {
+      showToast("Could not reschedule", "error");
+    } finally {
+      setRescheduling(false);
     }
   }
 
@@ -335,11 +386,50 @@ export default function BookingDetailPage({
           {/* Scheduled session (current booking system) */}
           {booking.slot?.startISO && (
             <div className="border border-border rounded-xl bg-cream-light">
-              <div className="px-4 sm:px-6 py-4 border-b border-border">
+              <div className="px-4 sm:px-6 py-4 border-b border-border flex items-center justify-between gap-3">
                 <h2 className="font-serif text-lg font-medium">
                   Scheduled Session
                 </h2>
+                {booking.status !== "cancelled" && (
+                  <button
+                    onClick={() => setShowReschedule((v) => !v)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted hover:text-forest hover:border-sage-400 hover:bg-accent-bg/50 transition-all flex-shrink-0"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    {showReschedule ? "Close" : "Reschedule"}
+                  </button>
+                )}
               </div>
+
+              {showReschedule && (
+                <div className="px-4 sm:px-6 py-5 border-b border-border bg-secondary-bg/20">
+                  <p className="text-sm text-muted mb-3">
+                    Pick a new date and time. Any time works — the website rules
+                    don&apos;t apply here. The client and you both get an email,
+                    and the calendar event moves to the new time.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
+                    <div className="flex-1">
+                      <DateTimePicker
+                        date={reschedDate}
+                        time={reschedTime}
+                        onDate={setReschedDate}
+                        onTime={setReschedTime}
+                        timezone={booking.slot.timezone || "Asia/Kolkata"}
+                      />
+                    </div>
+                    <button
+                      onClick={handleReschedule}
+                      disabled={rescheduling || !reschedDate || !reschedTime}
+                      className="px-4 py-2.5 rounded-lg bg-forest text-cream text-sm font-medium hover:bg-sage-700 transition-colors disabled:opacity-40 flex-shrink-0"
+                    >
+                      {rescheduling ? "Moving…" : "Move session"}
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="px-4 sm:px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <InfoField
                   label="Date"

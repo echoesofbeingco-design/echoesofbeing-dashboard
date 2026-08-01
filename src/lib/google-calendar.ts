@@ -318,6 +318,60 @@ export async function createEvent(
   }
 }
 
+/**
+ * Move an existing event to a new time.
+ *
+ * A PATCH keeps the same event id and Meet link, and with sendUpdates=all
+ * Google emails the guest an "event updated" notice automatically — so the
+ * client's existing calendar entry simply shifts rather than being cancelled
+ * and recreated. Returns the (unchanged) links, or null if the event is gone.
+ */
+export async function updateEventTime(
+  eventId: string,
+  input: { startISO: string; endISO: string; timezone: string }
+): Promise<CreatedEvent | null> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) return null;
+
+  try {
+    const res = await fetch(
+      `${EVENTS_URL}/${encodeURIComponent(eventId)}?sendUpdates=all`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          start: { dateTime: input.startISO, timeZone: input.timezone },
+          end: { dateTime: input.endISO, timeZone: input.timezone },
+        }),
+      }
+    );
+
+    const data = (await res.json()) as {
+      id?: string;
+      htmlLink?: string;
+      hangoutLink?: string;
+      error?: { message?: string };
+    };
+
+    if (!res.ok || !data.id) {
+      console.error("google: update event failed", data.error?.message ?? data);
+      return null;
+    }
+
+    return {
+      eventId: data.id,
+      htmlLink: data.htmlLink,
+      meetLink: data.hangoutLink,
+    };
+  } catch (error) {
+    console.error("google: update event threw", error);
+    return null;
+  }
+}
+
 /** Remove a session from the calendar (used when a booking is cancelled). */
 export async function deleteEvent(eventId: string): Promise<boolean> {
   const accessToken = await getAccessToken();

@@ -5,6 +5,8 @@
  * dependency. Never throws: a mail failure must not fail a booking.
  */
 
+import { buildIcs } from "@/lib/ics";
+
 const RESEND_URL = "https://api.resend.com/emails";
 
 export const ADMIN_EMAIL =
@@ -146,6 +148,118 @@ export async function sendCancellationEmails(
     sendEmail({
       to: ADMIN_EMAIL,
       subject: `Cancelled: ${input.name}`,
+      html: adminHtml,
+    }),
+  ]);
+}
+
+export interface RescheduleEmailInput {
+  bookingId: string;
+  name: string;
+  email: string;
+  sessionLabel: string;
+  fromISO: string;
+  toISO: string;
+  toEndISO: string;
+  timezone: string;
+  meetLink?: string | null;
+}
+
+/**
+ * Tell the client and the practice a session has moved. Google also emails the
+ * guest when the calendar event is patched, but only if they use Google
+ * Calendar — this is the reliable notice, and it carries a fresh .ics so other
+ * calendar apps pick up the new time too.
+ */
+export async function sendRescheduleEmails(
+  input: RescheduleEmailInput
+): Promise<void> {
+  const fmt = (iso: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: input.timezone,
+    }).format(new Date(iso));
+
+  const wasWhen = fmt(input.fromISO);
+  const nowWhen = fmt(input.toISO);
+
+  const ics = buildIcs({
+    uid: `booking-${input.bookingId}@echoesofbeing.co.in`,
+    startISO: input.toISO,
+    endISO: input.toEndISO,
+    summary: `${input.sessionLabel} — Echoes of Being`,
+    description: input.meetLink
+      ? `Your rescheduled session.\nJoin: ${input.meetLink}`
+      : "Your rescheduled session.",
+    location: input.meetLink ?? "Online",
+    organizerEmail: ADMIN_EMAIL,
+    organizerName: "Echoes of Being",
+    attendeeEmail: input.email,
+    attendeeName: input.name,
+  });
+
+  const clientHtml = emailShell(`
+    <h1 style="font-family:Georgia,serif;font-size:22px;color:#2d352d;margin:0 0 16px;">
+      Your session has been moved
+    </h1>
+    <p style="color:#5a615a;font-size:15px;line-height:1.7;margin:0 0 20px;">
+      Hi ${esc(input.name.split(" ")[0] || input.name)}, your session has been
+      rescheduled. Here are the new details.
+    </p>
+    <div style="background:#f2efe6;border-radius:14px;padding:18px;margin-bottom:20px;">
+      <p style="margin:0 0 6px;color:#2d352d;font-size:15px;font-weight:600;">${esc(input.sessionLabel)}</p>
+      <p style="margin:0 0 4px;color:#8a8f88;font-size:13px;text-decoration:line-through;">${esc(wasWhen)} (IST)</p>
+      <p style="margin:0;color:#2d352d;font-size:15px;font-weight:600;">${esc(nowWhen)} (IST)</p>
+      ${
+        input.meetLink
+          ? `<p style="margin:12px 0 0;font-size:14px;"><a href="${esc(input.meetLink)}" style="color:#5c7a5c;">Join the session</a></p>`
+          : ""
+      }
+    </div>
+    <p style="color:#5a615a;font-size:14px;line-height:1.7;margin:0;">
+      The attached calendar file will update this in any calendar app. If the
+      new time doesn&rsquo;t work for you, just let us know.
+    </p>
+  `);
+
+  const adminHtml = emailShell(`
+    <h1 style="font-family:Georgia,serif;font-size:20px;color:#2d352d;margin:0 0 16px;">
+      Session rescheduled — ${esc(input.name)}
+    </h1>
+    <table style="width:100%;font-size:14px;color:#5a615a;border-collapse:collapse;">
+      <tr><td style="padding:6px 0;">Was</td><td style="padding:6px 0;color:#2d352d;text-decoration:line-through;">${esc(wasWhen)} IST</td></tr>
+      <tr><td style="padding:6px 0;">Now</td><td style="padding:6px 0;color:#2d352d;font-weight:600;">${esc(nowWhen)} IST</td></tr>
+      <tr><td style="padding:6px 0;">Session</td><td style="padding:6px 0;color:#2d352d;">${esc(input.sessionLabel)}</td></tr>
+      <tr><td style="padding:6px 0;">Email</td><td style="padding:6px 0;color:#2d352d;">${esc(input.email)}</td></tr>
+    </table>
+    <p style="color:#5a615a;font-size:14px;line-height:1.7;margin:16px 0 0;">
+      The calendar event has been moved to the new time.
+    </p>
+  `);
+
+  const attachments = [
+    {
+      filename: "session.ics",
+      content: Buffer.from(ics, "utf-8").toString("base64"),
+    },
+  ];
+
+  await Promise.allSettled([
+    sendEmail({
+      to: input.email,
+      subject: "Your session has been moved | Echoes of Being",
+      html: clientHtml,
+      attachments,
+    }),
+    sendEmail({
+      to: ADMIN_EMAIL,
+      subject: `Rescheduled: ${input.name}`,
       html: adminHtml,
     }),
   ]);
